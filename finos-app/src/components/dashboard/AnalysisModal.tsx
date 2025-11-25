@@ -27,16 +27,16 @@ export function AnalysisModal({ isOpen, onClose, title, prompt }: AnalysisModalP
         setAnalysis('');
 
         try {
-            let fullResponse = '';
-            await chatWithTenali(
-                prompt,
-                [],
-                {},
-                (chunk) => {
-                    fullResponse += chunk;
-                    setAnalysis(fullResponse);
-                }
-            );
+            const stream = await chatWithTenali([{ role: 'user', content: prompt }]);
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                setAnalysis(prev => prev + chunk);
+            }
         } catch (err) {
             setError('Failed to fetch analysis. Please ensure the Tenali API is running.');
         } finally {

@@ -3,7 +3,18 @@
 
 const TENALI_API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || 'http://127.0.0.1:8000';
 
-// ... (interfaces)
+export interface TenaliMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
+
+export interface TenaliContext {
+    portfolio?: any;
+    market_data?: any;
+    user_preferences?: any;
+}
+
+const TENALI_SYSTEM_PROMPT = "You are Tenali, a wise and witty financial advisor. You provide accurate, data-backed financial insights with a touch of humor. Always prioritize the user's financial well-being.";
 
 // Chat with Tenali (Streaming)
 export async function chatWithTenali(
