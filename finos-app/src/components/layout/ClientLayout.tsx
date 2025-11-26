@@ -1,10 +1,9 @@
 "use client";
-// Force rebuild for Vercel
 
 import { usePathname } from 'next/navigation';
 import { Sidebar } from "@/components/layout/Sidebar";
 
-export default function AppLayout({
+export default function ClientLayout({
     children,
 }: {
     children: React.ReactNode;

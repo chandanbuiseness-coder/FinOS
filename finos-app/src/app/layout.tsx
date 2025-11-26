@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 import { PortfolioProvider } from "@/context/PortfolioContext";
-import AppLayout from "@/components/layout/AppLayout";
+import ClientLayout from "@/components/layout/ClientLayout";
 
 export const metadata: Metadata = {
   title: "FinOS - AI Financial Assistant",
@@ -31,7 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PortfolioProvider>
-          <AppLayout>{children}</AppLayout>
+          <ClientLayout>{children}</ClientLayout>
         </PortfolioProvider>
       </body>
     </html>
