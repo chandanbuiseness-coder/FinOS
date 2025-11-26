@@ -1,4 +1,5 @@
 "use client";
+// Force rebuild for Vercel
 
 import { usePathname } from 'next/navigation';
 import { Sidebar } from "@/components/layout/Sidebar";
