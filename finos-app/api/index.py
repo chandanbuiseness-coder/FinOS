@@ -236,38 +236,73 @@ async def get_market_data():
     }
     
     data = []
+    failed_tickers = []
+    
+    # 1. Try YFinance for all
     for symbol, name in tickers.items():
-        item_data = {
-            "symbol": symbol,
-            "name": name,
-            "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
-            "status": get_market_status(symbol)
-        }
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.fast_info
             price = info.last_price
             prev = info.previous_close
             
-            # Validation
             if price is None: raise ValueError("No price")
             
-            item_data.update({
+            data.append({
+                "symbol": symbol,
+                "name": name,
+                "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                "status": get_market_status(symbol),
                 "price": price,
                 "change": price - prev,
                 "change_percent": ((price - prev) / prev) * 100
             })
         except:
-            # FALLBACK DATA (If API fails, show realistic mock data so UI isn't empty)
-            # This is critical for demo/portfolio stability
-            mock_price = 22500.0 if "Nifty" in name else 74000.0 if "Sensex" in name else 65000.0 if "Bitcoin" in name else 100.0
-            item_data.update({
-                "price": mock_price,
-                "change": 150.50,
-                "change_percent": 0.75,
-                "is_mock": True
-            })
-        data.append(item_data)
+            failed_tickers.append(symbol)
+            
+    # 2. Batch Gemini Fallback for failed tickers
+    if failed_tickers:
+        ai_data = get_gemini_fallback("market_batch", failed_tickers)
+        if ai_data:
+            for symbol in failed_tickers:
+                if symbol in ai_data:
+                    item = ai_data[symbol]
+                    data.append({
+                        "symbol": symbol,
+                        "name": tickers[symbol],
+                        "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                        "status": get_market_status(symbol),
+                        "price": item.get("price", 0.0),
+                        "change": item.get("change", 0.0),
+                        "change_percent": item.get("change_percent", 0.0),
+                        "is_mock": True,
+                        "source": "AI_ESTIMATE"
+                    })
+                else:
+                    # Final Static Fallback
+                    data.append({
+                        "symbol": symbol,
+                        "name": tickers[symbol],
+                        "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                        "status": get_market_status(symbol),
+                        "price": 0.0,
+                        "change": 0.0,
+                        "change_percent": 0.0,
+                        "is_mock": True
+                    })
+        else:
+            # Final Static Fallback if AI fails
+            for symbol in failed_tickers:
+                data.append({
+                    "symbol": symbol,
+                    "name": tickers[symbol],
+                    "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                    "status": get_market_status(symbol),
+                    "price": 0.0,
+                    "change": 0.0,
+                    "change_percent": 0.0,
+                    "is_mock": True
+                })
             
     return {"items": data, "status": "Mixed"}
 
@@ -286,7 +321,7 @@ def get_gemini_fallback(prompt_type, query):
     """Use Gemini to generate fallback data if APIs fail"""
     if not GEMINI_API_KEY: return None
     
-    cache_key = f"{prompt_type}:{query}"
+    cache_key = f"{prompt_type}:{str(query)}"
     if cache_key in gemini_cache:
         # 5 min cache
         if (time.time() - gemini_cache[cache_key]["time"]) < 300:
@@ -321,6 +356,21 @@ def get_gemini_fallback(prompt_type, query):
             }
             gemini_cache[cache_key] = {"time": time.time(), "data": result}
             return result
+
+        elif prompt_type == "market_batch":
+            # Query is a list of tickers
+            prompt = f"""
+            You are a financial data API.
+            Provide REALISTIC current market prices for these indices/crypto: {', '.join(query)}.
+            Return ONLY a JSON object where keys are the symbols and values are objects with: price (float), change (float), change_percent (float).
+            Example: {{"^NSEI": {{"price": 22000, "change": 100, "change_percent": 0.5}}}}
+            Do not add markdown formatting.
+            """
+            response = model.generate_content(prompt)
+            import json
+            data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
+            gemini_cache[cache_key] = {"time": time.time(), "data": data}
+            return data
             
         elif prompt_type == "news":
             prompt = """
