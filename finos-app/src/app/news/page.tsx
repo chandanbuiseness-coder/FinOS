@@ -88,8 +88,9 @@ export default function NewsPage() {
                             )}
                             <CardHeader className="flex-1">
                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                    <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
+                                    <Badge variant="outline" className={`text-xs border-gray-600 text-gray-400 ${article.publisher === "AI News" ? "border-yellow-500/50 text-yellow-500 bg-yellow-500/10" : ""}`}>
                                         {article.publisher}
+                                        {article.publisher === "AI News" && " (Generated)"}
                                     </Badge>
                                     <span className="text-xs text-gray-500">
                                         {(() => {
