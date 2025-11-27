@@ -11,10 +11,10 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 export interface MarketItem {
     symbol: string;
     name: string;
-    price: string;
-    change: string;
-    changePercent: string;
-    volume: string;
+    price: number | string;
+    change: number | string;
+    changePercent: number | string;
+    volume: number | string;
     type?: string;
     status?: string;
 }
@@ -25,6 +25,18 @@ interface MarketTableProps {
 }
 
 export function MarketTable({ items, showStatus = false }: MarketTableProps) {
+    // Helper to safely format numbers
+    const formatValue = (val: number | string, decimals = 2) => {
+        if (typeof val === 'number') return val.toFixed(decimals);
+        return val;
+    };
+
+    // Helper to check if positive
+    const isPositive = (val: number | string) => {
+        if (typeof val === 'number') return val >= 0;
+        return val.toString().startsWith('+');
+    };
+
     return (
         <div className="rounded-md border border-gray-800 bg-gray-900 text-white">
             <Table>
@@ -44,14 +56,16 @@ export function MarketTable({ items, showStatus = false }: MarketTableProps) {
                         <TableRow key={item.symbol} className="border-gray-800 hover:bg-gray-800/50">
                             <TableCell className="font-medium text-indigo-400">{item.symbol}</TableCell>
                             <TableCell>{item.name}</TableCell>
-                            <TableCell className="text-right">{item.price}</TableCell>
-                            <TableCell className={`text-right flex justify-end items-center gap-1 ${item.change.startsWith("+") ? "text-green-500" : "text-red-500"}`}>
-                                {item.change}
+                            <TableCell className="text-right">
+                                {typeof item.price === 'number' ? item.price.toLocaleString() : item.price}
                             </TableCell>
-                            <TableCell className={`text-right ${item.changePercent.startsWith("+") ? "text-green-500" : "text-red-500"}`}>
+                            <TableCell className={`text-right flex justify-end items-center gap-1 ${isPositive(item.change) ? "text-green-500" : "text-red-500"}`}>
+                                {isPositive(item.change) ? '+' : ''}{formatValue(item.change)}
+                            </TableCell>
+                            <TableCell className={`text-right ${isPositive(item.changePercent) ? "text-green-500" : "text-red-500"}`}>
                                 <div className="flex items-center justify-end">
-                                    {item.changePercent.startsWith("+") ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-                                    {item.changePercent}
+                                    {isPositive(item.changePercent) ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
+                                    {formatValue(item.changePercent)}%
                                 </div>
                             </TableCell>
                             {showStatus && (

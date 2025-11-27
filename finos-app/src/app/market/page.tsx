@@ -35,9 +35,9 @@ export default function MarketPage() {
         );
     }
 
-    const indices = data?.items.filter(i => i.type === 'INDEX') || [];
-    const crypto = data?.items.filter(i => i.type === 'CRYPTO') || [];
-    const forex = data?.items.filter(i => i.type === 'FOREX') || [];
+    const indices = data?.items?.filter(i => i.type === 'INDEX') || [];
+    const crypto = data?.items?.filter(i => i.type === 'CRYPTO') || [];
+    const forex = data?.items?.filter(i => i.type === 'FOREX') || [];
 
     return (
         <div className="p-6 text-white h-full overflow-y-auto">
