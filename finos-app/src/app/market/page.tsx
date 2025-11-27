@@ -41,17 +41,9 @@ export default function MarketPage() {
 
     return (
         <div className="p-6 text-white h-full overflow-y-auto">
-            <div className="mb-6 flex justify-between items-end">
-                <div>
-                    <h2 className="text-3xl font-bold">Market Overview</h2>
-                    <p className="text-gray-400">Real-time global market data.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-400">Status:</span>
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${data?.status === 'Market Open' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                        {data?.status || 'Unknown'}
-                    </span>
-                </div>
+            <div className="mb-6">
+                <h2 className="text-3xl font-bold">Market Overview</h2>
+                <p className="text-gray-400">Real-time global market data.</p>
             </div>
 
             <Tabs defaultValue="indices" className="w-full">
@@ -61,13 +53,13 @@ export default function MarketPage() {
                     <TabsTrigger value="forex">Forex</TabsTrigger>
                 </TabsList>
                 <TabsContent value="indices" className="mt-4">
-                    <MarketTable items={indices} />
+                    <MarketTable items={indices} showStatus />
                 </TabsContent>
                 <TabsContent value="crypto" className="mt-4">
-                    <MarketTable items={crypto} />
+                    <MarketTable items={crypto} showStatus />
                 </TabsContent>
                 <TabsContent value="forex" className="mt-4">
-                    <MarketTable items={forex} />
+                    <MarketTable items={forex} showStatus />
                 </TabsContent>
             </Tabs>
         </div>

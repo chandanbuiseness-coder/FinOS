@@ -16,13 +16,15 @@ export interface MarketItem {
     changePercent: string;
     volume: string;
     type?: string;
+    status?: string;
 }
 
 interface MarketTableProps {
     items: MarketItem[];
+    showStatus?: boolean;
 }
 
-export function MarketTable({ items }: MarketTableProps) {
+export function MarketTable({ items, showStatus = false }: MarketTableProps) {
     return (
         <div className="rounded-md border border-gray-800 bg-gray-900 text-white">
             <Table>
@@ -33,6 +35,7 @@ export function MarketTable({ items }: MarketTableProps) {
                         <TableHead className="text-right text-gray-400">Price</TableHead>
                         <TableHead className="text-right text-gray-400">Change</TableHead>
                         <TableHead className="text-right text-gray-400">% Change</TableHead>
+                        {showStatus && <TableHead className="text-right text-gray-400">Status</TableHead>}
                         <TableHead className="text-right text-gray-400">Volume</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -51,7 +54,14 @@ export function MarketTable({ items }: MarketTableProps) {
                                     {item.changePercent}
                                 </div>
                             </TableCell>
-                            <TableCell className="text-right text-gray-400">{item.volume}</TableCell>
+                            {showStatus && (
+                                <TableCell className="text-right">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.status === 'Open' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                                        {item.status || 'Closed'}
+                                    </span>
+                                </TableCell>
+                            )}
+                            <TableCell className="text-right text-gray-400">{item.volume || '-'}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
