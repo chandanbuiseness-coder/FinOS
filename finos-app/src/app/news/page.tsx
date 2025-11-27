@@ -92,7 +92,13 @@ export default function NewsPage() {
                                         {article.publisher}
                                     </Badge>
                                     <span className="text-xs text-gray-500">
-                                        {new Date(article.providerPublishTime * 1000).toLocaleDateString()}
+                                        {(() => {
+                                            try {
+                                                return new Date(article.providerPublishTime * 1000).toLocaleDateString();
+                                            } catch (e) {
+                                                return "Recently";
+                                            }
+                                        })()}
                                     </span>
                                 </div>
                                 <CardTitle className="text-white text-lg line-clamp-2 leading-tight">
