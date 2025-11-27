@@ -15,6 +15,7 @@ export interface MarketItem {
     change: string;
     changePercent: string;
     volume: string;
+    type?: string;
 }
 
 interface MarketTableProps {

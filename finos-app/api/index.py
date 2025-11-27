@@ -72,7 +72,8 @@ STATIC_TICKER_MAP = {
     # US Tech
     "APPLE": "AAPL", "MICROSOFT": "MSFT", "GOOGLE": "GOOGL", "AMAZON": "AMZN",
     "TESLA": "TSLA", "META": "META", "NETFLIX": "NFLX", "NVIDIA": "NVDA",
-    "AMD": "AMD", "INTEL": "INTC", "COINBASE": "COIN",
+    "AMD": "AMD", "INTEL": "INTC", "COINBASE": "COIN", "ORACLE": "ORCL",
+    "IBM": "IBM", "SALESFORCE": "CRM", "ADOBE": "ADBE", "UBER": "UBER",
     
     # Crypto
     "BITCOIN": "BTC-USD", "BTC": "BTC-USD",
@@ -83,8 +84,10 @@ STATIC_TICKER_MAP = {
     "CARDANO": "ADA-USD", "ADA": "ADA-USD",
     "SHIBA": "SHIB-USD", "SHIB": "SHIB-USD",
     "MATIC": "MATIC-USD", "POLYGON": "MATIC-USD",
+    "LITECOIN": "LTC-USD", "LTC": "LTC-USD",
+    "BINANCE": "BNB-USD", "BNB": "BNB-USD",
     
-    # NSE Top 50 (Common Names)
+    # NSE Top 100 (Expanded)
     "RELIANCE": "RELIANCE.NS", "RIL": "RELIANCE.NS",
     "TCS": "TCS.NS", "TATA CONSULTANCY": "TCS.NS",
     "HDFC BANK": "HDFCBANK.NS", "HDFC": "HDFCBANK.NS",
@@ -109,7 +112,59 @@ STATIC_TICKER_MAP = {
     "ZOMATO": "ZOMATO.NS",
     "PAYTM": "PAYTM.NS",
     "JIO": "JIOFIN.NS", "JIO FINANCIAL": "JIOFIN.NS",
-    "OLA": "OLAELEC.NS", "OLA ELECTRIC": "OLAELEC.NS"
+    "OLA": "OLAELEC.NS", "OLA ELECTRIC": "OLAELEC.NS",
+    "ADANI ENT": "ADANIENT.NS", "ADANI ENTERPRISES": "ADANIENT.NS",
+    "ADANI PORTS": "ADANIPORTS.NS",
+    "ADANI GREEN": "ADANIGREEN.NS",
+    "ADANI POWER": "ADANIPOWER.NS",
+    "POWER GRID": "POWERGRID.NS",
+    "NTPC": "NTPC.NS",
+    "ONGC": "ONGC.NS",
+    "COAL INDIA": "COALINDIA.NS",
+    "TATA STEEL": "TATASTEEL.NS",
+    "JSW STEEL": "JSWSTEEL.NS",
+    "HINDALCO": "HINDALCO.NS",
+    "GRASIM": "GRASIM.NS",
+    "CIPLA": "CIPLA.NS",
+    "DR REDDY": "DRREDDY.NS",
+    "APOLLO HOSP": "APOLLOHOSP.NS",
+    "DIVIS LAB": "DIVISLAB.NS",
+    "TECH MAHINDRA": "TECHM.NS", "TECHM": "TECHM.NS",
+    "HCL TECH": "HCLTECH.NS",
+    "EICHER MOTORS": "EICHERMOT.NS",
+    "HERO MOTO": "HEROMOTOCO.NS",
+    "BAJAJ AUTO": "BAJAJ-AUTO.NS",
+    "M&M": "M&M.NS", "MAHINDRA": "M&M.NS",
+    "BRITANNIA": "BRITANNIA.NS",
+    "INDUSIND": "INDUSINDBK.NS",
+    "BPCL": "BPCL.NS",
+    "UPL": "UPL.NS",
+    "SBILIFE": "SBILIFE.NS",
+    "HDFC LIFE": "HDFCLIFE.NS",
+    "BAJAJ FINSERV": "BAJAJFINSV.NS",
+    "DLF": "DLF.NS",
+    "HAL": "HAL.NS", "HINDUSTAN AERO": "HAL.NS",
+    "BEL": "BEL.NS", "BHARAT ELECTRONICS": "BEL.NS",
+    "IRCTC": "IRCTC.NS",
+    "RVNL": "RVNL.NS",
+    "IRFC": "IRFC.NS",
+    "MAZAGON": "MAZDOCK.NS",
+    "COCHIN SHIP": "COCHINSHIP.NS",
+    "BHEL": "BHEL.NS",
+    "SAIL": "SAIL.NS",
+    "VEDANTA": "VEDL.NS",
+    "YES BANK": "YESBANK.NS",
+    "IDEA": "IDEA.NS", "VODAFONE": "IDEA.NS",
+    "SUZLON": "SUZLON.NS",
+    "TATA POWER": "TATAPOWER.NS",
+    "TATA CHEM": "TATACHEM.NS",
+    "TATA ELXSI": "TATAELXSI.NS",
+    "TRENT": "TRENT.NS",
+    "ZZEE": "ZEEL.NS", "ZEE": "ZEEL.NS",
+    "NYKAA": "NYKAA.NS",
+    "DELHIVERY": "DELHIVERY.NS",
+    "POLICYBAZAAR": "POLICYBZR.NS",
+    "LICI": "LICI.NS", "LIC": "LICI.NS"
 }
 
 # Ticker Map
@@ -141,6 +196,89 @@ def load_ticker_map():
                     
             TICKER_NAMES = list(TICKER_MAP.keys())
     except: pass
+
+@app.get("/api/py/market")
+async def get_market_data():
+    """Fetch global market indices, crypto, and forex"""
+    try:
+        tickers = {
+            # Indices
+            "^NSEI": "Nifty 50", "^BSESN": "Sensex", "^NSEBANK": "Bank Nifty",
+            "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IXIC": "Nasdaq",
+            "^FTSE": "FTSE 100", "^N225": "Nikkei 225",
+            
+            # Crypto
+            "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
+            "DOGE-USD": "Dogecoin", "BNB-USD": "Binance Coin",
+            
+            # Forex
+            "INR=X": "USD/INR", "EURINR=X": "EUR/INR", "GBPINR=X": "GBP/INR",
+            "JPYINR=X": "JPY/INR"
+        }
+        
+        data = []
+        for symbol, name in tickers.items():
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.fast_info
+                price = info.last_price
+                prev = info.previous_close
+                if price and prev:
+                    change = price - prev
+                    change_pct = (change / prev) * 100
+                    data.append({
+                        "symbol": symbol,
+                        "name": name,
+                        "price": price,
+                        "change": change,
+                        "change_percent": change_pct,
+                        "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX"
+                    })
+            except: continue
+            
+        return {"items": data, "status": "Market Open" if datetime.now().hour in range(9, 16) else "Market Closed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/py/news")
+async def get_news():
+    """Fetch latest financial news from multiple sources"""
+    try:
+        # Fetch news from Nifty and Sensex to get broad coverage
+        tickers = ["^NSEI", "^BSESN"]
+        all_news = []
+        seen_links = set()
+        
+        for symbol in tickers:
+            try:
+                news = yf.Ticker(symbol).news
+                for item in news:
+                    link = item.get("link")
+                    if link in seen_links: continue
+                    seen_links.add(link)
+                    
+                    # Extract image
+                    image_url = None
+                    if "thumbnail" in item and "resolutions" in item["thumbnail"]:
+                        res = item["thumbnail"]["resolutions"]
+                        if res: image_url = res[0]["url"]
+                        
+                    all_news.append({
+                        "title": item.get("title"),
+                        "publisher": item.get("publisher"),
+                        "link": link,
+                        "providerPublishTime": item.get("providerPublishTime"),
+                        "type": item.get("type", "STORY"),
+                        "image": image_url
+                    })
+            except: continue
+            
+        # Sort by time descending
+        all_news.sort(key=lambda x: x.get("providerPublishTime", 0), reverse=True)
+        return {"items": all_news[:20]} # Return top 20
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/py/quote")
 async def get_quote(request: QuoteRequest):
