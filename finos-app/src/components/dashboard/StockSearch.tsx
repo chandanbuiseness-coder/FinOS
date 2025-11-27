@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Search, Plus, TrendingUp, BarChart2, MessageSquare, X, Check } from 'lucide-react';
+import { Search, Plus, TrendingUp, BarChart2, MessageSquare, X, Check, RefreshCw } from 'lucide-react';
 import { fetchRealTimeQuote } from '@/lib/api/marketData';
 import { AnalysisModal } from './AnalysisModal';
 import { usePortfolio } from "@/context/PortfolioContext";
@@ -118,6 +118,13 @@ export function StockSearch() {
                                             AI Estimate
                                         </Badge>
                                     )}
+                                    <button
+                                        onClick={() => handleSearch({ preventDefault: () => { } } as any)}
+                                        className="ml-2 p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition-colors"
+                                        title="Refresh Data"
+                                    >
+                                        <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                                    </button>
                                 </div>
                                 <div className="flex items-baseline gap-2 mt-1">
                                     <span className="text-2xl font-bold text-white">
