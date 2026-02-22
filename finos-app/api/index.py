@@ -1,54 +1,123 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import requests
 import json
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, date
 import pytz
 import pandas as pd
 import io
 import difflib
+import time
 from typing import List, Dict, Optional
 
-# Create FastAPI app
+# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 
-# Configuration
-HF_TOKEN = os.getenv("HF_TOKEN")
-HF_API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-1.5B-Instruct"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Request models
-class Message(BaseModel):
-    role: str
-    content: str
+# ── Scanner import ────────────────────────────────────────────────────────────
+try:
+    from api.scanner import run_scan as _run_scan
+except ImportError:
+    try:
+        from scanner import run_scan as _run_scan
+    except ImportError:
+        _run_scan = None
 
-class ChatRequest(BaseModel):
-    messages: List[Message]
-    context: Optional[Dict] = {}
-    stream: bool = True
-    max_tokens: int = 1024
-    temperature: float = 0.7
 
-class QuoteRequest(BaseModel):
-    symbol: str
+# ── API Keys ─────────────────────────────────────────────────────────────────
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 
-# Cache
+# ── NSE Holiday List 2025 (official) ─────────────────────────────────────────
+NSE_HOLIDAYS_2025 = {
+    date(2025, 1, 26),   # Republic Day
+    date(2025, 2, 26),   # Mahashivratri
+    date(2025, 3, 14),   # Holi
+    date(2025, 3, 31),   # Id-Ul-Fitr (Eid)
+    date(2025, 4, 10),   # Shri Ram Navami
+    date(2025, 4, 14),   # Dr. Baba Saheb Ambedkar Jayanti
+    date(2025, 4, 18),   # Good Friday
+    date(2025, 5, 1),    # Maharashtra Day
+    date(2025, 8, 15),   # Independence Day
+    date(2025, 8, 27),   # Ganesh Chaturthi
+    date(2025, 10, 2),   # Gandhi Jayanti
+    date(2025, 10, 2),   # Dussehra
+    date(2025, 10, 20),  # Diwali - Laxmi Pujan (muhurat trading only)
+    date(2025, 10, 21),  # Diwali - Balipratipada
+    date(2025, 11, 5),   # Prakash Gurpurb Sri Guru Nanak Dev
+    date(2025, 12, 25),  # Christmas
+}
+
+NSE_HOLIDAYS_2026 = {
+    date(2026, 1, 26),   # Republic Day
+    date(2026, 3, 4),    # Mahashivaratri (approx)
+    date(2026, 4, 3),    # Good Friday (approx)
+    date(2026, 4, 14),   # Dr. Ambedkar Jayanti
+    date(2026, 5, 1),    # Maharashtra Day
+    date(2026, 8, 15),   # Independence Day
+    date(2026, 10, 2),   # Gandhi Jayanti
+    date(2026, 12, 25),  # Christmas
+}
+
+def is_nse_open(now_ist: datetime) -> str:
+    today = now_ist.date()
+    # Weekend
+    if now_ist.weekday() >= 5:
+        return "Closed"
+    # Holiday
+    all_holidays = NSE_HOLIDAYS_2025 | NSE_HOLIDAYS_2026
+    if today in all_holidays:
+        return "Holiday"
+    # Market hours: 09:15 – 15:30 IST
+    market_open  = now_ist.replace(hour=9,  minute=15, second=0, microsecond=0)
+    market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+    pre_open     = now_ist.replace(hour=9,  minute=0,  second=0, microsecond=0)
+    if pre_open <= now_ist < market_open:
+        return "Pre-Open"
+    if market_open <= now_ist <= market_close:
+        return "Open"
+    return "Closed"
+
+def get_market_status(symbol: str) -> str:
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    if "-USD" in symbol:
+        return "Open"   # Crypto — 24/7
+    if "=X" in symbol:
+        return "Open"   # Forex — mostly 24/5
+    if ".NS" in symbol or ".BO" in symbol or symbol in {"^NSEI", "^BSESN", "^NSEBANK"}:
+        return is_nse_open(now)
+    # US Markets (Eastern time)
+    et = pytz.timezone("US/Eastern")
+    us  = datetime.now(et)
+    if us.weekday() >= 5:
+        return "Closed"
+    us_open  = us.replace(hour=9,  minute=30, second=0, microsecond=0)
+    us_close = us.replace(hour=16, minute=0,  second=0, microsecond=0)
+    return "Open" if us_open <= us <= us_close else "Closed"
+
+# ── Market Context (for chat prompt) ─────────────────────────────────────────
 market_cache = {"data": "", "timestamp": 0}
 
-# Helper Functions
 def get_market_context():
     global market_cache
-    import time
     current_time = time.time()
     if current_time - market_cache["timestamp"] < 300 and market_cache["data"]:
         return market_cache["data"]
-
     try:
         tickers = {"^NSEI": "Nifty 50", "^NSEBANK": "Bank Nifty", "INR=X": "USD/INR"}
-        data_text = [f"Date: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%b %H:%M')}"]
-        
+        data_text = [f"Date: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%b %H:%M IST')}"]
         for ticker, name in tickers.items():
             try:
                 hist = yf.Ticker(ticker).history(period="2d")
@@ -59,22 +128,22 @@ def get_market_context():
                         data_text.append(f"{name}: {current:,.0f} ({change:+.2f}%)")
                     else:
                         data_text.append(f"{name}: {current:,.0f}")
-            except: continue
-                
+            except:
+                continue
         result = " | ".join(data_text)
         market_cache["data"] = result
         market_cache["timestamp"] = current_time
         return result
-    except: return market_cache["data"]
+    except:
+        return market_cache["data"]
 
-# Static Fallback Map (Top Stocks & Crypto)
+# ── Static Ticker Map ─────────────────────────────────────────────────────────
 STATIC_TICKER_MAP = {
     # US Tech
     "APPLE": "AAPL", "MICROSOFT": "MSFT", "GOOGLE": "GOOGL", "AMAZON": "AMZN",
     "TESLA": "TSLA", "META": "META", "NETFLIX": "NFLX", "NVIDIA": "NVDA",
     "AMD": "AMD", "INTEL": "INTC", "COINBASE": "COIN", "ORACLE": "ORCL",
     "IBM": "IBM", "SALESFORCE": "CRM", "ADOBE": "ADBE", "UBER": "UBER",
-    
     # Crypto
     "BITCOIN": "BTC-USD", "BTC": "BTC-USD",
     "ETHEREUM": "ETH-USD", "ETH": "ETH-USD",
@@ -86,8 +155,7 @@ STATIC_TICKER_MAP = {
     "MATIC": "MATIC-USD", "POLYGON": "MATIC-USD",
     "LITECOIN": "LTC-USD", "LTC": "LTC-USD",
     "BINANCE": "BNB-USD", "BNB": "BNB-USD",
-    
-    # NSE Top 100 (Expanded)
+    # NSE Top Stocks
     "RELIANCE": "RELIANCE.NS", "RIL": "RELIANCE.NS",
     "TCS": "TCS.NS", "TATA CONSULTANCY": "TCS.NS",
     "HDFC BANK": "HDFCBANK.NS", "HDFC": "HDFCBANK.NS",
@@ -160,414 +228,553 @@ STATIC_TICKER_MAP = {
     "TATA CHEM": "TATACHEM.NS",
     "TATA ELXSI": "TATAELXSI.NS",
     "TRENT": "TRENT.NS",
-    "ZZEE": "ZEEL.NS", "ZEE": "ZEEL.NS",
+    "ZEE": "ZEEL.NS",
     "NYKAA": "NYKAA.NS",
     "DELHIVERY": "DELHIVERY.NS",
     "POLICYBAZAAR": "POLICYBZR.NS",
-    "LICI": "LICI.NS", "LIC": "LICI.NS"
+    "LICI": "LICI.NS", "LIC": "LICI.NS",
 }
 
-# Ticker Map
-TICKER_MAP = STATIC_TICKER_MAP.copy()
+TICKER_MAP   = STATIC_TICKER_MAP.copy()
 TICKER_NAMES = list(TICKER_MAP.keys())
+_nse_loaded  = False
 
 def load_ticker_map():
-    global TICKER_MAP, TICKER_NAMES
-    # If we already have more than static map, skip
-    if len(TICKER_MAP) > len(STATIC_TICKER_MAP): return
-    
+    global TICKER_MAP, TICKER_NAMES, _nse_loaded
+    if _nse_loaded:
+        return
     try:
-        url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            df = pd.read_csv(io.StringIO(response.text))
+        url     = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp    = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            df = pd.read_csv(io.StringIO(resp.text))
             for _, row in df.iterrows():
-                symbol = f"{row['SYMBOL']}.NS"
-                name = row['NAME OF COMPANY'].upper()
-                # Add exact symbol
-                TICKER_MAP[row['SYMBOL'].upper()] = symbol
-                # Add company name
+                symbol     = f"{row['SYMBOL']}.NS"
+                name       = row["NAME OF COMPANY"].upper()
+                TICKER_MAP[row["SYMBOL"].upper()] = symbol
                 TICKER_MAP[name] = symbol
-                # Add first word of company name (often the common name)
-                first_word = name.split()[0]
-                if len(first_word) > 2 and first_word not in TICKER_MAP:
-                    TICKER_MAP[first_word] = symbol
-                    
+                first = name.split()[0]
+                if len(first) > 2 and first not in TICKER_MAP:
+                    TICKER_MAP[first] = symbol
             TICKER_NAMES = list(TICKER_MAP.keys())
-    except: pass
+            _nse_loaded  = True
+    except:
+        pass
 
-# Helper for Market Status
-def get_market_status(symbol):
-    now = datetime.now(pytz.timezone('Asia/Kolkata'))
-    if "-USD" in symbol: return "Open" # Crypto always open
-    if "=X" in symbol: return "Open" # Forex mostly open
-    
-    # Indian Markets (NSE/BSE)
-    if ".NS" in symbol or ".BO" in symbol or symbol in ["^NSEI", "^BSESN", "^NSEBANK"]:
-        if now.weekday() >= 5: return "Closed" # Weekend
-        start = now.replace(hour=9, minute=15, second=0)
-        end = now.replace(hour=15, minute=30, second=0)
-        return "Open" if start <= now <= end else "Closed"
-        
-    # US Markets (Simple approx)
-    if symbol in ["^GSPC", "^DJI", "^IXIC"] or not "." in symbol:
-        us_time = datetime.now(pytz.timezone('US/Eastern'))
-        if us_time.weekday() >= 5: return "Closed"
-        start = us_time.replace(hour=9, minute=30, second=0)
-        end = us_time.replace(hour=16, minute=0, second=0)
-        return "Open" if start <= us_time <= end else "Closed"
-        
-    return "Closed"
+# ── Gemini Helper ─────────────────────────────────────────────────────────────
+gemini_cache: Dict = {}
 
-@app.get("/api/py/market")
-async def get_market_data():
-    """Fetch global market indices, crypto, and forex with Fallbacks"""
-    tickers = {
-        # Indices
-        "^NSEI": "Nifty 50", "^BSESN": "Sensex", "^NSEBANK": "Bank Nifty",
-        "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IXIC": "Nasdaq",
-        
-        # Crypto
-        "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
-        
-        # Forex
-        "INR=X": "USD/INR", "EURINR=X": "EUR/INR"
+def _gemini_generate(prompt: str, system: str = "") -> str:
+    """Call Gemini 2.0 Flash REST API directly (no SDK needed)."""
+    if not GEMINI_API_KEY:
+        raise ValueError("No GEMINI_API_KEY")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    contents = []
+    if system:
+        contents.append({"role": "user", "parts": [{"text": f"[System]: {system}\n\n{prompt}"}]})
+    else:
+        contents.append({"role": "user", "parts": [{"text": prompt}]})
+    payload  = {"contents": contents, "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024}}
+    resp     = requests.post(url, json=payload, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+def _gemini_stream(messages: List[Dict], system: str = ""):
+    """Stream from Gemini 2.0 Flash — yields text chunks."""
+    if not GEMINI_API_KEY:
+        yield "Tenali is temporarily unavailable. Please try again in a moment."
+        return
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}"
+    contents = []
+    if system:
+        # Gemini doesn't have a system role in v1beta, prepend as first user turn
+        contents.append({"role": "user", "parts": [{"text": system}]})
+        contents.append({"role": "model", "parts": [{"text": "Understood. I am Tenali, your FinOS Chief Investment Officer."}]})
+    for msg in messages:
+        role = "model" if msg["role"] == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+    payload = {
+        "contents": contents,
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1500},
     }
-    
-    data = []
-    failed_tickers = []
-    
-    # 1. Try YFinance for all
-    for symbol, name in tickers.items():
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.fast_info
-            price = info.last_price
-            prev = info.previous_close
-            
-            if price is None: raise ValueError("No price")
-            
-            data.append({
-                "symbol": symbol,
-                "name": name,
-                "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
-                "status": get_market_status(symbol),
-                "price": price,
-                "change": price - prev,
-                "change_percent": ((price - prev) / prev) * 100
-            })
-        except:
-            failed_tickers.append(symbol)
-            
-    # 2. Batch Gemini Fallback for failed tickers
-    if failed_tickers:
-        ai_data = get_gemini_fallback("market_batch", failed_tickers)
-        if ai_data:
-            for symbol in failed_tickers:
-                if symbol in ai_data:
-                    item = ai_data[symbol]
-                    data.append({
-                        "symbol": symbol,
-                        "name": tickers[symbol],
-                        "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
-                        "status": get_market_status(symbol),
-                        "price": item.get("price", 0.0),
-                        "change": item.get("change", 0.0),
-                        "change_percent": item.get("change_percent", 0.0),
-                        "is_mock": True,
-                        "source": "AI_ESTIMATE"
-                    })
-                else:
-                    # Final Static Fallback
-                    data.append({
-                        "symbol": symbol,
-                        "name": tickers[symbol],
-                        "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
-                        "status": get_market_status(symbol),
-                        "price": 0.0,
-                        "change": 0.0,
-                        "change_percent": 0.0,
-                        "is_mock": True
-                    })
-        else:
-            # Final Static Fallback if AI fails
-            for symbol in failed_tickers:
-                data.append({
-                    "symbol": symbol,
-                    "name": tickers[symbol],
-                    "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
-                    "status": get_market_status(symbol),
-                    "price": 0.0,
-                    "change": 0.0,
-                    "change_percent": 0.0,
-                    "is_mock": True
-                })
-            
-    return {"items": data, "status": "Mixed"}
+    try:
+        with requests.post(url, json=payload, stream=True, timeout=60) as r:
+            for line in r.iter_lines():
+                if line:
+                    decoded = line.decode("utf-8")
+                    if decoded.startswith("data:"):
+                        try:
+                            chunk = json.loads(decoded[5:].strip())
+                            text  = chunk["candidates"][0]["content"]["parts"][0]["text"]
+                            yield text
+                        except:
+                            pass
+    except Exception as e:
+        yield f"\n\n[Tenali encountered an issue: {str(e)}]"
 
-import google.generativeai as genai
-import os
+def _groq_stream(messages: List[Dict], system: str = ""):
+    """Stream from Groq Llama-3.1-8B — fallback when Gemini rate-limits."""
+    if not GROQ_API_KEY:
+        yield "Tenali is busy right now. Please try again in a moment."
+        return
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    groq_messages = [{"role": "system", "content": system}] if system else []
+    for msg in messages:
+        groq_messages.append({"role": msg["role"], "content": msg["content"]})
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": groq_messages,
+        "max_tokens": 1500,
+        "temperature": 0.7,
+        "stream": True,
+    }
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    try:
+        with requests.post(url, json=payload, headers=headers, stream=True, timeout=60) as r:
+            for line in r.iter_lines():
+                if line:
+                    decoded = line.decode("utf-8")
+                    if decoded.startswith("data:") and "[DONE]" not in decoded:
+                        try:
+                            chunk = json.loads(decoded[5:].strip())
+                            delta = chunk["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except:
+                            pass
+    except Exception as e:
+        yield f"\n\n[Tenali fallback error: {str(e)}]"
 
-# Configure Gemini
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
-# Simple Cache for Gemini
-gemini_cache = {}
-
-def get_gemini_fallback(prompt_type, query):
-    """Use Gemini to generate fallback data if APIs fail"""
-    if not GEMINI_API_KEY: return None
-    
+def get_gemini_fallback(prompt_type: str, query) -> Optional[Dict]:
+    """Use Gemini to generate fallback market/news data when APIs fail."""
+    if not GEMINI_API_KEY:
+        return None
     cache_key = f"{prompt_type}:{str(query)}"
     if cache_key in gemini_cache:
-        # 5 min cache
         if (time.time() - gemini_cache[cache_key]["time"]) < 300:
             return gemini_cache[cache_key]["data"]
-            
     try:
-        model = genai.GenerativeModel('gemini-pro')
-        
         if prompt_type == "quote":
-            prompt = f"""
-            You are a financial data API. 
-            The user is asking for the current price of stock: {query}.
-            Since real-time API failed, provide a REALISTIC ESTIMATE based on the last known closing price.
-            Return ONLY a JSON object with these keys: price (float), change (float), change_percent (float).
-            Do not add markdown formatting.
-            """
-            response = model.generate_content(prompt)
-            import json
-            data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-            
+            prompt = f"""You are a financial data API.
+Provide a REALISTIC ESTIMATE for the current price of: {query}
+Return ONLY a JSON object (no markdown): {{"price": float, "change": float, "change_percent": float}}"""
+            text = _gemini_generate(prompt)
+            data = json.loads(text.strip().replace("```json", "").replace("```", ""))
             result = {
                 "symbol": query,
                 "price": data.get("price", 100.0),
                 "change": data.get("change", 0.0),
                 "change_percent": data.get("change_percent", 0.0),
                 "day_high": data.get("price", 100.0) * 1.02,
-                "day_low": data.get("price", 100.0) * 0.98,
-                "volume": 1000000,
+                "day_low":  data.get("price", 100.0) * 0.98,
+                "volume": 1_000_000,
                 "previous_close": data.get("price", 100.0) - data.get("change", 0.0),
                 "currency": "INR" if ".NS" in query else "USD",
-                "source": "AI_ESTIMATE"
+                "source": "AI_ESTIMATE",
             }
             gemini_cache[cache_key] = {"time": time.time(), "data": result}
             return result
 
         elif prompt_type == "market_batch":
-            # Query is a list of tickers
-            prompt = f"""
-            You are a financial data API.
-            Provide REALISTIC current market prices for these indices/crypto: {', '.join(query)}.
-            Return ONLY a JSON object where keys are the symbols and values are objects with: price (float), change (float), change_percent (float).
-            Example: {{"^NSEI": {{"price": 22000, "change": 100, "change_percent": 0.5}}}}
-            Do not add markdown formatting.
-            """
-            response = model.generate_content(prompt)
-            import json
-            data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
+            prompt = f"""You are a financial data API.
+Provide REALISTIC current market prices for: {', '.join(query)}
+Return ONLY a JSON object (no markdown) where keys are symbols:
+{{"^NSEI": {{"price": 22000, "change": 100, "change_percent": 0.5}}, ...}}"""
+            text = _gemini_generate(prompt)
+            data = json.loads(text.strip().replace("```json", "").replace("```", ""))
             gemini_cache[cache_key] = {"time": time.time(), "data": data}
             return data
-            
+
         elif prompt_type == "news":
-            prompt = """
-            Generate 10 realistic financial news headlines for today.
-            Focus on Indian and US Markets (Nifty, Sensex, Tech Stocks).
-            Return ONLY a JSON array of objects with keys: title, publisher, link (use '#').
-            Do not add markdown formatting.
-            """
-            response = model.generate_content(prompt)
-            import json
-            data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-            
-            news_items = []
-            for item in data:
-                news_items.append({
-                    "title": item.get("title"),
-                    "publisher": item.get("publisher", "AI News"),
-                    "link": "#",
-                    "providerPublishTime": int(time.time()),
-                    "type": "STORY",
-                    "image": f"https://placehold.co/600x400/1e293b/ffffff?text=News"
-                })
-            
-            gemini_cache[cache_key] = {"time": time.time(), "data": {"items": news_items}}
-            return {"items": news_items}
-            
+            prompt = """Generate 10 realistic financial news headlines for today.
+Focus on Indian markets (Nifty, Sensex, NSE stocks). Be specific, not generic.
+Return ONLY a JSON array (no markdown):
+[{"title": "...", "publisher": "Economic Times", "link": "#"}, ...]"""
+            text  = _gemini_generate(prompt)
+            items_raw = json.loads(text.strip().replace("```json", "").replace("```", ""))
+            now   = int(time.time())
+            items = [{
+                "title": i.get("title"),
+                "publisher": i.get("publisher", "AI News"),
+                "link": "#",
+                "providerPublishTime": now,
+                "type": "STORY",
+                "image": f"https://placehold.co/600x400/1e293b/ffffff?text=News",
+            } for i in items_raw]
+            result = {"items": items}
+            gemini_cache[cache_key] = {"time": time.time(), "data": result}
+            return result
+
     except Exception as e:
-        print(f"Gemini Error: {e}")
+        print(f"Gemini fallback error: {e}")
         return None
+
+# ── Request Models ─────────────────────────────────────────────────────────────
+class Message(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[Message]
+    context: Optional[Dict] = {}
+    stream: bool = True
+
+class QuoteRequest(BaseModel):
+    symbol: str
+
+class JournalAnalysisRequest(BaseModel):
+    trades: List[Dict]
+    user_stats: Optional[Dict] = {}
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/py/market")
+async def get_market_data():
+    """Fetch global market indices, crypto, and forex with Gemini fallback."""
+    tickers = {
+        "^NSEI": "Nifty 50", "^BSESN": "Sensex", "^NSEBANK": "Bank Nifty",
+        "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IXIC": "Nasdaq",
+        "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
+        "INR=X": "USD/INR", "EURINR=X": "EUR/INR",
+    }
+    data: List[Dict] = []
+    failed: List[str] = []
+
+    for symbol, name in tickers.items():
+        try:
+            info  = yf.Ticker(symbol).fast_info
+            price = info.last_price
+            prev  = info.previous_close
+            if price is None:
+                raise ValueError("No price")
+            change = price - prev
+            data.append({
+                "symbol": symbol,
+                "name": name,
+                "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                "status": get_market_status(symbol),
+                "price": price,
+                "change": change,
+                "change_percent": (change / prev) * 100 if prev else 0,
+            })
+        except:
+            failed.append(symbol)
+
+    if failed:
+        ai_data = get_gemini_fallback("market_batch", failed)
+        for symbol in failed:
+            item = ai_data.get(symbol, {}) if ai_data else {}
+            data.append({
+                "symbol": symbol,
+                "name": tickers[symbol],
+                "type": "CRYPTO" if "-USD" in symbol else "FOREX" if "=X" in symbol else "INDEX",
+                "status": get_market_status(symbol),
+                "price": item.get("price", 0.0),
+                "change": item.get("change", 0.0),
+                "change_percent": item.get("change_percent", 0.0),
+                "is_mock": not bool(item),
+                "source": "AI_ESTIMATE" if item else "UNAVAILABLE",
+            })
+
+    return {"items": data, "status": "ok"}
+
 
 @app.get("/api/py/news")
 async def get_news():
-    """Fetch news from Google News RSS -> Gemini Fallback -> Static Fallback"""
-    try:
-        # 1. Try Google News RSS
-        rss_url = "https://news.google.com/rss/topics/CAAqJggBCiJCAQAqJggBCiJCAQAqIQgKIhtDQWlxQndZQU14QW5ibWxsY3pRd2RIVnpLQUFQAQ?hl=en-IN&gl=IN&ceid=IN:en"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(rss_url, headers=headers, timeout=5)
-        
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(response.content)
-        
-        news_items = []
-        for item in root.findall('.//item')[:15]:
-            title = item.find('title').text if item.find('title') is not None else "News Update"
-            link = item.find('link').text if item.find('link') is not None else "#"
-            pubDate = item.find('pubDate').text if item.find('pubDate') is not None else ""
-            source = item.find('source').text if item.find('source') is not None else "Google News"
-            image = f"https://placehold.co/600x400/1e293b/ffffff?text={title[:10]}"
-            timestamp = int(time.time())
-            
-            news_items.append({
-                "title": title,
-                "publisher": source,
-                "link": link,
-                "providerPublishTime": timestamp,
-                "publishedAt": pubDate,
-                "type": "STORY",
-                "image": image
-            })
-            
-        return {"items": news_items}
-    except Exception:
-        # 2. Try Gemini Fallback
-        ai_news = get_gemini_fallback("news", "")
-        if ai_news: return ai_news
-        
-        # 3. Emergency Static Fallback
-        now = int(time.time())
-        return {"items": [
-            {"title": "Market hits all-time high amid strong global cues", "publisher": "FinOS News", "link": "#", "providerPublishTime": now, "image": "https://placehold.co/600x400/1e293b/ffffff?text=Market+High"},
-            {"title": "Tech stocks rally as AI adoption accelerates", "publisher": "FinOS News", "link": "#", "providerPublishTime": now - 3600, "image": "https://placehold.co/600x400/1e293b/ffffff?text=Tech+Rally"},
-            {"title": "RBI keeps repo rate unchanged in latest policy meet", "publisher": "FinOS News", "link": "#", "providerPublishTime": now - 7200, "image": "https://placehold.co/600x400/1e293b/ffffff?text=RBI+Policy"}
-        ]}
+    """Fetch news: Google News RSS → ET/MC RSS → Gemini → static fallback."""
+    rss_sources = [
+        ("Google News", "https://news.google.com/rss/search?q=indian+stock+market+nifty&hl=en-IN&gl=IN&ceid=IN:en"),
+        ("Economic Times", "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"),
+        ("Moneycontrol", "https://www.moneycontrol.com/rss/MCtopnews.xml"),
+    ]
+    import xml.etree.ElementTree as ET
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    for source_name, rss_url in rss_sources:
+        try:
+            resp = requests.get(rss_url, headers=headers, timeout=6)
+            if resp.status_code != 200:
+                continue
+            root = ET.fromstring(resp.content)
+            items = []
+            for item in root.findall(".//item")[:15]:
+                title  = item.find("title")
+                link   = item.find("link")
+                pubdate= item.find("pubDate")
+                source = item.find("source")
+                items.append({
+                    "title": title.text if title is not None else "News Update",
+                    "publisher": (source.text if source is not None else source_name),
+                    "link": link.text if link is not None else "#",
+                    "providerPublishTime": int(time.time()),
+                    "publishedAt": pubdate.text if pubdate is not None else "",
+                    "type": "STORY",
+                    "image": f"https://placehold.co/600x400/1e293b/ffffff?text=News",
+                })
+            if items:
+                return {"items": items, "source": source_name}
+        except:
+            continue
+
+    # Gemini fallback
+    ai_news = get_gemini_fallback("news", "")
+    if ai_news:
+        return ai_news
+
+    # Final static fallback
+    now = int(time.time())
+    return {"items": [
+        {"title": "Nifty holds above 22,000; IT stocks lead gains", "publisher": "FinOS", "link": "#", "providerPublishTime": now, "image": "https://placehold.co/600x400/1e293b/ffffff?text=Nifty"},
+        {"title": "RBI policy decision: Repo rate unchanged at 6.5%", "publisher": "FinOS", "link": "#", "providerPublishTime": now - 3600, "image": "https://placehold.co/600x400/1e293b/ffffff?text=RBI"},
+        {"title": "FII inflows surge as global sentiment improves", "publisher": "FinOS", "link": "#", "providerPublishTime": now - 7200, "image": "https://placehold.co/600x400/1e293b/ffffff?text=FII"},
+    ]}
+
 
 @app.post("/api/py/quote")
 async def get_quote(request: QuoteRequest):
+    """Get real-time stock quote with Gemini fallback."""
     load_ticker_map()
+    query  = request.symbol.upper().strip()
+    symbol = query
+
+    if query in TICKER_MAP:
+        symbol = TICKER_MAP[query]
+    else:
+        matches = [k for k in TICKER_NAMES if k.startswith(query)]
+        if matches:
+            matches.sort(key=len)
+            symbol = TICKER_MAP[matches[0]]
+        elif len(query) > 2:
+            close = difflib.get_close_matches(query, TICKER_NAMES, n=1, cutoff=0.5)
+            if close:
+                symbol = TICKER_MAP[close[0]]
+
+    if not any(x in symbol for x in [".NS", ".BO", "^", "-", "="]):
+        symbol += ".NS"
+
     try:
-        query = request.symbol.upper().strip()
-        symbol = query
-        
-        if query in TICKER_MAP: symbol = TICKER_MAP[query]
-        else:
-            matches = [k for k in TICKER_NAMES if k.startswith(query)]
-            if matches:
-                matches.sort(key=len)
-                symbol = TICKER_MAP[matches[0]]
-            elif len(query) > 2:
-                close_matches = difflib.get_close_matches(query, TICKER_NAMES, n=1, cutoff=0.5)
-                if close_matches: symbol = TICKER_MAP[close_matches[0]]
-
-        if not any(x in symbol for x in [".NS", ".BO", "^", "-", "="]):
-            if len(symbol) <= 5 and symbol.isalpha(): symbol += ".NS"
-            else: symbol += ".NS"
-            
-        try:
-            info = yf.Ticker(symbol).fast_info
-            price = info.last_price
-            if price is None: raise ValueError("No price")
-            
-            return {
-                "symbol": symbol,
-                "price": price,
-                "change": price - info.previous_close,
-                "change_percent": ((price - info.previous_close) / info.previous_close) * 100,
-                "day_high": info.day_high,
-                "day_low": info.day_low,
-                "volume": info.last_volume,
-                "previous_close": info.previous_close,
-                "currency": info.currency
-            }
-        except:
-            # 2. Try Gemini Fallback
-            ai_data = get_gemini_fallback("quote", symbol)
-            if ai_data: return ai_data
-            
-            # 3. Ultimate Catch-All Mock Fallback
-            # If everything fails, generate a plausible mock so the UI never breaks
-            import random
-            mock_price = random.uniform(100, 5000)
-            mock_change = random.uniform(-50, 50)
-            return {
-                "symbol": symbol,
-                "price": mock_price,
-                "change": mock_change,
-                "change_percent": (mock_change / mock_price) * 100,
-                "day_high": mock_price * 1.02,
-                "day_low": mock_price * 0.98,
-                "volume": random.randint(100000, 10000000),
-                "previous_close": mock_price - mock_change,
-                "currency": "INR" if ".NS" in symbol else "USD",
-                "source": "SYSTEM_MOCK" # Indicates purely algorithmic fallback
-            }
-
-    except Exception as e:
-        # Even the catch-all shouldn't fail, but just in case
-        print(f"Critical Error: {e}")
+        info  = yf.Ticker(symbol).fast_info
+        price = info.last_price
+        if price is None:
+            raise ValueError("No price")
+        prev = info.previous_close
         return {
-            "symbol": request.symbol.upper(),
-            "price": 0.0,
-            "change": 0.0,
-            "change_percent": 0.0,
-            "day_high": 0.0,
-            "day_low": 0.0,
-            "volume": 0,
-            "previous_close": 0.0,
-            "currency": "USD",
-            "source": "ERROR"
+            "symbol": symbol,
+            "price": price,
+            "change": price - prev,
+            "change_percent": ((price - prev) / prev) * 100 if prev else 0,
+            "day_high": info.day_high,
+            "day_low":  info.day_low,
+            "volume":   info.last_volume,
+            "previous_close": prev,
+            "currency": info.currency,
         }
+    except:
+        ai = get_gemini_fallback("quote", symbol)
+        if ai:
+            return ai
+        import random
+        mp = random.uniform(100, 3000)
+        mc = random.uniform(-30, 30)
+        return {
+            "symbol": symbol,
+            "price": mp,
+            "change": mc,
+            "change_percent": (mc / mp) * 100,
+            "day_high": mp * 1.02,
+            "day_low":  mp * 0.98,
+            "volume":   random.randint(100_000, 5_000_000),
+            "previous_close": mp - mc,
+            "currency": "INR" if ".NS" in symbol else "USD",
+            "source": "SYSTEM_MOCK",
+        }
+
 
 @app.post("/api/py/chat")
 async def chat(request: ChatRequest):
-    try:
-        market_context = get_market_context()
-        
-        system_prompt = f"""Role: Chief Investment Officer (CIO).
-Context: {market_context}
-Objective: Provide institutional-grade financial analysis.
+    """
+    Tenali AI chat — Gemini 2.0 Flash primary, Groq Llama-3.1-8B fallback.
+    """
+    market_context = get_market_context()
+    ist = pytz.timezone("Asia/Kolkata")
+    nse_status = is_nse_open(datetime.now(ist))
+
+    system_prompt = f"""You are Tenali, FinOS's Chief Investment Officer and AI financial analyst.
+You have 20 years of NSE/BSE trading experience. You think like:
+- Rakesh Jhunjhunwala: High conviction, long-term compounding mindset
+- Radhakishan Damani: Patience, value identification, risk-first thinking  
+- A quant analyst: Data-driven, probability-based, systematic
+
+Current Market Context: {market_context}
+NSE Market Status: {nse_status}
+
 Rules:
-1. Bottom Line First.
-2. Data-Backed Claims.
-3. Indian Context (NSE/BSE).
+1. Lead with the bottom line — give the insight first, explain second
+2. Use Indian context: NSE/BSE tickers, ₹ currency, Indian regulations (SEBI)
+3. Be specific with numbers and levels; avoid vague statements
+4. Always mention risk — no trade setup without a stop-loss
+5. If asked for stock picks, give educational analysis only — remind user to do own research
+6. Keep responses concise but data-rich — traders want signal, not noise"""
+
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    # Try Gemini first, fall back to Groq
+    use_gemini = bool(GEMINI_API_KEY)
+    use_groq   = bool(GROQ_API_KEY)
+
+    if not use_gemini and not use_groq:
+        async def no_llm():
+            yield b"Tenali is currently unavailable - API keys not configured. Please check your environment variables."
+        return StreamingResponse(no_llm(), media_type="text/plain")
+
+    async def gemini_with_fallback():
+        try:
+            for chunk in _gemini_stream(messages, system_prompt):
+                yield chunk.encode("utf-8")
+        except Exception as e:
+            err_str = str(e).lower()
+            rate_limited = "429" in err_str or "quota" in err_str or "rate" in err_str
+            if rate_limited and use_groq:
+                # Silently switch to Groq
+                for chunk in _groq_stream(messages, system_prompt):
+                    yield chunk.encode("utf-8")
+            else:
+                if use_groq:
+                    for chunk in _groq_stream(messages, system_prompt):
+                        yield chunk.encode("utf-8")
+                else:
+                    yield b"Tenali encountered an error. Please try again in a moment."
+
+    async def groq_only():
+        for chunk in _groq_stream(messages, system_prompt):
+            yield chunk.encode("utf-8")
+
+    if use_gemini:
+        return StreamingResponse(gemini_with_fallback(), media_type="text/plain")
+    else:
+        return StreamingResponse(groq_only(), media_type="text/plain")
+
+
+@app.post("/api/py/journal-analysis")
+async def journal_analysis(request: JournalAnalysisRequest):
+    """
+    Real AI analysis of trading journal using Gemini 2.0 Flash.
+    Returns structured insights as JSON.
+    """
+    trades = request.trades
+    if not trades:
+        raise HTTPException(status_code=400, detail="No trades to analyze")
+
+    if not GEMINI_API_KEY and not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="LLM not configured")
+
+    # Build trade summary for the prompt
+    closed  = [t for t in trades if t.get("net_pnl") is not None]
+    winners = [t for t in closed if (t.get("net_pnl") or 0) > 0]
+    losers  = [t for t in closed if (t.get("net_pnl") or 0) < 0]
+    win_rate = (len(winners) / len(closed) * 100) if closed else 0
+    total_pnl = sum(t.get("net_pnl") or 0 for t in closed)
+    avg_win   = sum(t.get("net_pnl") or 0 for t in winners) / len(winners) if winners else 0
+    avg_loss  = sum(t.get("net_pnl") or 0 for t in losers)  / len(losers)  if losers  else 0
+
+    symbols   = [t.get("symbol", "") for t in trades]
+    strategies= [t.get("strategy", "") for t in trades if t.get("strategy")]
+    emotions  = [t.get("pre_trade_emotion", "") for t in trades if t.get("pre_trade_emotion")]
+
+    trade_summary = f"""
+Trading Journal Summary:
+- Total trades: {len(trades)} ({len(closed)} closed)
+- Win Rate: {win_rate:.1f}% ({len(winners)} wins, {len(losers)} losses)
+- Total P&L: ₹{total_pnl:.2f}
+- Avg Win: ₹{avg_win:.2f} | Avg Loss: ₹{avg_loss:.2f}
+- Risk/Reward: {abs(avg_win/avg_loss):.2f}x (target: >1.5x)
+- Most traded: {', '.join(list(set(symbols))[:5])}
+- Strategies used: {', '.join(list(set(strategies))[:5]) or 'Not specified'}
+- Dominant emotions: {', '.join(list(set(emotions))[:5]) or 'Not specified'}
+
+Recent trades (last 5):
+{json.dumps(trades[:5], indent=2, default=str)}
 """
-        
-        formatted_prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-        for m in request.messages:
-            if m.role != "system":
-                formatted_prompt += f"<|im_start|>{m.role}\n{m.content}<|im_end|>\n"
-        formatted_prompt += "<|im_start|>assistant\n"
 
-        if request.stream:
-            return StreamingResponse(stream_hf_response(formatted_prompt), media_type="text/plain")
+    prompt = f"""You are Tenali, an expert trading coach. Analyze this trader's journal:
+
+{trade_summary}
+
+Provide analysis in this EXACT JSON format (no markdown wrapping):
+{{
+  "summary": "2-3 sentence overall performance summary",
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "patterns": ["pattern detected 1", "pattern detected 2"],
+  "recommendations": ["specific actionable recommendation 1", "recommendation 2", "recommendation 3"],
+  "risk_score": "Low/Medium/High",
+  "key_metric": "one most important number to focus on improving"
+}}
+
+Be specific to their actual data. Reference real numbers. Be direct and practical."""
+
+    try:
+        if GEMINI_API_KEY:
+            text = _gemini_generate(prompt)
         else:
-            response = await query_hf_api(formatted_prompt)
-            return {"response": response}
+            # Use Groq non-streaming
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800,
+                "temperature": 0.5,
+            }
+            resp = requests.post(url, json=payload, headers=headers, timeout=20)
+            text = resp.json()["choices"][0]["message"]["content"]
 
+        # Parse JSON from response
+        clean = text.strip().replace("```json", "").replace("```", "").strip()
+        # Find the JSON object
+        start = clean.find("{")
+        end   = clean.rfind("}") + 1
+        if start >= 0 and end > start:
+            clean = clean[start:end]
+        result = json.loads(clean)
+        return result
+
+    except Exception as e:
+        print(f"Journal analysis error: {e}")
+        # Return structured fallback
+        return {
+            "summary": f"You have completed {len(closed)} trades with a {win_rate:.1f}% win rate and total P&L of ₹{total_pnl:.2f}.",
+            "strengths": ["You are actively tracking your trades — first step to improvement"],
+            "weaknesses": ["Analysis service temporarily unavailable — try again"],
+            "patterns": [],
+            "recommendations": ["Continue journaling consistently", "Review your stop-loss discipline"],
+            "risk_score": "Medium",
+            "key_metric": f"Win Rate: {win_rate:.1f}%",
+        }
+
+
+@app.get("/api/py/health")
+async def health():
+    return {
+        "status": "ok",
+        "gemini": bool(GEMINI_API_KEY),
+        "groq": bool(GROQ_API_KEY),
+        "timestamp": datetime.now(pytz.timezone("Asia/Kolkata")).isoformat(),
+    }
+
+
+# ── Trade Scanner ─────────────────────────────────────────────────────────────
+@app.get("/api/py/scanner")
+async def scanner(type: str = "swing"):
+    """Run trade scanner for a given type: intraday | swing | longterm"""
+    if type not in ("intraday", "swing", "longterm"):
+        raise HTTPException(status_code=400, detail="type must be intraday, swing, or longterm")
+    if _run_scan is None:
+        raise HTTPException(status_code=503, detail="Scanner module not available")
+    try:
+        result = _run_scan(type)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-async def query_hf_api(prompt):
-    payload = {"inputs": prompt, "parameters": {"max_new_tokens": 1024, "return_full_text": False}}
-    response = requests.post(HF_API_URL, headers={"Authorization": f"Bearer {HF_TOKEN}"}, json=payload)
-    return response.json()[0]["generated_text"]
-
-async def stream_hf_response(prompt):
-    payload = {"inputs": prompt, "parameters": {"max_new_tokens": 1024, "return_full_text": False}, "stream": True}
-    try:
-        with requests.post(HF_API_URL, headers={"Authorization": f"Bearer {HF_TOKEN}"}, json=payload, stream=True) as r:
-            for line in r.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith("data:"):
-                        try:
-                            json_data = json.loads(decoded_line[5:])
-                            if "token" in json_data:
-                                yield json_data["token"]["text"].encode()
-                        except: pass
-    except Exception as e:
-        yield f"Error: {str(e)}".encode()

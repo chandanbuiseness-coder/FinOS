@@ -119,23 +119,40 @@ export async function fetchForexRate(fromCurrency: string, toCurrency: string) {
     }
 }
 
-// World Indices (Mock for now - Yahoo Finance unofficial API can be added)
+// World Indices — fetched from the Python backend (yFinance + Gemini fallback)
 export async function fetchIndices() {
     const cacheKey = 'indices';
     const cached = getCached(cacheKey);
     if (cached) return cached;
 
-    // TODO: Integrate Yahoo Finance unofficial API
-    const indices = [
-        { symbol: '^NSEI', name: 'Nifty 50', price: 22150.50, change: 125.30, changePercent: '+0.57%' },
-        { symbol: '^BSESN', name: 'Sensex', price: 73250.25, change: 320.75, changePercent: '+0.44%' },
-        { symbol: '^GSPC', name: 'S&P 500', price: 4850.20, change: -15.40, changePercent: '-0.32%' },
-        { symbol: '^DJI', name: 'Dow Jones', price: 38200.50, change: 85.20, changePercent: '+0.22%' },
-        { symbol: '^IXIC', name: 'Nasdaq', price: 15350.75, change: -45.30, changePercent: '-0.29%' },
-    ];
-
-    setCache(cacheKey, indices);
-    return indices;
+    try {
+        const API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || '/api/py';
+        const resp = await fetch(`${API_URL}/market`, { cache: 'no-store' });
+        if (!resp.ok) throw new Error('Market API unavailable');
+        const json = await resp.json();
+        const items = (json.items ?? []).filter((i: any) => i.type === 'INDEX');
+        const indices = items.map((i: any) => ({
+            symbol: i.symbol,
+            name: i.name,
+            price: i.price,
+            change: i.change,
+            changePercent: `${i.change_percent >= 0 ? '+' : ''}${i.change_percent.toFixed(2)}%`,
+            status: i.status ?? 'Unknown',
+        }));
+        setCache(cacheKey, indices);
+        return indices;
+    } catch {
+        // Fallback static values
+        const indices = [
+            { symbol: '^NSEI', name: 'Nifty 50', price: 22150.50, change: 125.30, changePercent: '+0.57%', status: 'Unknown' },
+            { symbol: '^BSESN', name: 'Sensex', price: 73250.25, change: 320.75, changePercent: '+0.44%', status: 'Unknown' },
+            { symbol: '^GSPC', name: 'S&P 500', price: 4850.20, change: -15.40, changePercent: '-0.32%', status: 'Unknown' },
+            { symbol: '^DJI', name: 'Dow Jones', price: 38200.50, change: 85.20, changePercent: '+0.22%', status: 'Unknown' },
+            { symbol: '^IXIC', name: 'Nasdaq', price: 15350.75, change: -45.30, changePercent: '-0.29%', status: 'Unknown' },
+        ];
+        setCache(cacheKey, indices);
+        return indices;
+    }
 }
 
 // Commodities (Alpha Vantage or Mock)
@@ -230,8 +247,8 @@ export async function fetchAllMarketData() {
 }
 // Real-time Quote from Python Backend (yfinance)
 export async function fetchRealTimeQuote(symbol: string) {
-    // Use the same URL as Tenali API
-    const API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || 'http://127.0.0.1:8000';
+    // Use relative path for Vercel/Next.js (proxies to backend)
+    const API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || '/api/py';
 
     try {
         const response = await fetch(`${API_URL}/quote`, {

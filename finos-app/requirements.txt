@@ -6,4 +6,5 @@ pandas==2.2.0
 yfinance==0.2.36
 python-multipart==0.0.7
 pytz==2024.1
-google-generativeai==0.3.2
+# Removed google-generativeai SDK — now using direct REST API calls to Gemini
+# Groq is accessed via REST API too — no SDK needed

@@ -1,8 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { fetchRealTimeQuote } from '@/lib/api/marketData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { fetchRealTimeQuote } from "@/lib/api/marketData";
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 export interface Asset {
     symbol: string;
     name: string;
@@ -25,10 +27,11 @@ export interface WatchlistItem {
 interface PortfolioContextType {
     assets: Asset[];
     watchlist: WatchlistItem[];
-    addAsset: (asset: Asset) => void;
-    removeAsset: (symbol: string) => void;
-    addToWatchlist: (symbol: string) => void;
-    removeFromWatchlist: (symbol: string) => void;
+    isLoading: boolean;
+    addAsset: (asset: Asset) => Promise<void>;
+    removeAsset: (symbol: string) => Promise<void>;
+    addToWatchlist: (symbol: string) => Promise<void>;
+    removeFromWatchlist: (symbol: string) => Promise<void>;
     refreshData: () => Promise<void>;
     totalValue: number;
     totalInvestment: number;
@@ -38,134 +41,251 @@ interface PortfolioContextType {
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
 
+// ── Helper: fetch live price ──────────────────────────────────────────────────
+async function enrichWithPrice<T extends { symbol: string }>(
+    items: T[]
+): Promise<(T & { price?: number; change?: number; changePercent?: number; currentPrice?: number; value?: number })[]> {
+    return Promise.all(
+        items.map(async (item) => {
+            try {
+                const q = await fetchRealTimeQuote(item.symbol);
+                const isAsset = "quantity" in item;
+                const qty = isAsset ? (item as any).quantity ?? 0 : 0;
+                return {
+                    ...item,
+                    currentPrice: q.price,
+                    price: q.price,
+                    value: isAsset ? q.price * qty : undefined,
+                    change: q.change,
+                    changePercent: q.change_percent,
+                };
+            } catch {
+                return item;
+            }
+        })
+    );
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
-    // Initial State (Empty)
+    const supabase = createClient();
+
     const [assets, setAssets] = useState<Asset[]>([]);
     const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
 
-    // Derived Totals
+    // Derived totals
     const [totalValue, setTotalValue] = useState(0);
     const [totalInvestment, setTotalInvestment] = useState(0);
     const [totalReturn, setTotalReturn] = useState(0);
     const [totalReturnPercent, setTotalReturnPercent] = useState(0);
 
-    // Fetch live prices
-    const refreshData = async () => {
-        // Update Assets
-        const updatedAssets = await Promise.all(assets.map(async (asset) => {
-            try {
-                const quote = await fetchRealTimeQuote(asset.symbol);
-                return {
-                    ...asset,
-                    currentPrice: quote.price,
-                    value: quote.price * asset.quantity,
-                    change: quote.change,
-                    changePercent: quote.change_percent
-                };
-            } catch (e) {
-                return asset; // Keep old data if fetch fails
-            }
-        }));
-        setAssets(updatedAssets);
-
-        // Update Watchlist
-        const updatedWatchlist = await Promise.all(watchlist.map(async (item) => {
-            try {
-                const quote = await fetchRealTimeQuote(item.symbol);
-                return {
-                    ...item,
-                    price: quote.price,
-                    change: quote.change,
-                    changePercent: quote.change_percent
-                };
-            } catch (e) {
-                return item;
-            }
-        }));
-        setWatchlist(updatedWatchlist);
-    };
-
-    // Calculate Totals whenever assets change
+    // Re-compute totals whenever assets change
     useEffect(() => {
-        let invest = 0;
-        let value = 0;
-
-        assets.forEach(asset => {
-            invest += asset.quantity * asset.avgPrice;
-            value += (asset.currentPrice || asset.avgPrice) * asset.quantity;
+        let invest = 0, value = 0;
+        assets.forEach((a) => {
+            invest += a.quantity * a.avgPrice;
+            value += (a.currentPrice ?? a.avgPrice) * a.quantity;
         });
-
         setTotalInvestment(invest);
         setTotalValue(value);
         setTotalReturn(value - invest);
         setTotalReturnPercent(invest > 0 ? ((value - invest) / invest) * 100 : 0);
     }, [assets]);
 
-    // Load from LocalStorage on Mount
-    useEffect(() => {
-        const savedAssets = localStorage.getItem('finos_assets');
-        const savedWatchlist = localStorage.getItem('finos_watchlist');
+    // ── Load from Supabase (with localStorage migration) ─────────────────────
+    const loadFromSupabase = useCallback(async (uid: string) => {
+        setIsLoading(true);
+        try {
+            // ── 1. Migrate localStorage if data exists ────────────────────────
+            const lsAssets = localStorage.getItem("finos_assets");
+            const lsWatchlist = localStorage.getItem("finos_watchlist");
 
-        if (savedAssets) setAssets(JSON.parse(savedAssets));
-        if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
+            if (lsAssets) {
+                try {
+                    const parsed: Asset[] = JSON.parse(lsAssets);
+                    if (parsed.length > 0) {
+                        const rows = parsed.map((a) => ({
+                            user_id: uid,
+                            symbol: a.symbol,
+                            name: a.name,
+                            quantity: a.quantity,
+                            avg_price: a.avgPrice,
+                        }));
+                        await supabase.from("user_portfolio").upsert(rows, { onConflict: "user_id,symbol" });
+                        localStorage.removeItem("finos_assets");
+                        console.log("[FinOS] Migrated portfolio from localStorage → Supabase");
+                    }
+                } catch { }
+            }
 
-        refreshData();
-        const interval = setInterval(refreshData, 60000); // Auto-refresh every minute
-        return () => clearInterval(interval);
-    }, []);
+            if (lsWatchlist) {
+                try {
+                    const parsed: WatchlistItem[] = JSON.parse(lsWatchlist);
+                    if (parsed.length > 0) {
+                        const rows = parsed.map((w) => ({ user_id: uid, symbol: w.symbol }));
+                        await supabase.from("user_watchlist").upsert(rows, { onConflict: "user_id,symbol" });
+                        localStorage.removeItem("finos_watchlist");
+                        console.log("[FinOS] Migrated watchlist from localStorage → Supabase");
+                    }
+                } catch { }
+            }
 
-    // Save to LocalStorage on Change
-    useEffect(() => {
-        localStorage.setItem('finos_assets', JSON.stringify(assets));
-    }, [assets]);
+            // ── 2. Load from Supabase ─────────────────────────────────────────
+            const [{ data: portfolioRows }, { data: watchlistRows }] = await Promise.all([
+                supabase.from("user_portfolio").select("*").eq("user_id", uid).order("created_at"),
+                supabase.from("user_watchlist").select("*").eq("user_id", uid).order("added_at"),
+            ]);
 
-    useEffect(() => {
-        localStorage.setItem('finos_watchlist', JSON.stringify(watchlist));
-    }, [watchlist]);
+            const rawAssets: Asset[] = (portfolioRows ?? []).map((row) => ({
+                symbol: row.symbol,
+                name: row.name,
+                quantity: Number(row.quantity),
+                avgPrice: Number(row.avg_price),
+            }));
 
-    const addAsset = (newAsset: Asset) => {
-        setAssets(prev => [...prev, newAsset]);
-        refreshData(); // Fetch price for new asset
-    };
+            const rawWatchlist: WatchlistItem[] = (watchlistRows ?? []).map((row) => ({
+                symbol: row.symbol,
+                name: row.symbol,
+            }));
 
-    const removeAsset = (symbol: string) => {
-        setAssets(prev => prev.filter(a => a.symbol !== symbol));
-    };
+            // ── 3. Enrich with live prices ────────────────────────────────────
+            const [enrichedAssets, enrichedWatchlist] = await Promise.all([
+                enrichWithPrice(rawAssets),
+                enrichWithPrice(rawWatchlist),
+            ]);
 
-    const addToWatchlist = (symbol: string) => {
-        if (!watchlist.find(w => w.symbol === symbol)) {
-            setWatchlist(prev => [...prev, { symbol, name: symbol }]);
-            refreshData();
+            setAssets(enrichedAssets as Asset[]);
+            setWatchlist(enrichedWatchlist as WatchlistItem[]);
+        } catch (err) {
+            console.error("[FinOS] Error loading portfolio:", err);
+        } finally {
+            setIsLoading(false);
         }
-    };
+    }, [supabase]);
 
-    const removeFromWatchlist = (symbol: string) => {
-        setWatchlist(prev => prev.filter(w => w.symbol !== symbol));
-    };
+    // ── Auth listener + initial load ──────────────────────────────────────────
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) {
+                setUserId(user.id);
+                loadFromSupabase(user.id);
+            } else {
+                setIsLoading(false);
+            }
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            const uid = session?.user?.id ?? null;
+            setUserId(uid);
+            if (uid) {
+                loadFromSupabase(uid);
+            } else {
+                setAssets([]);
+                setWatchlist([]);
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, [loadFromSupabase, supabase]);
+
+    // ── Auto-refresh prices every 60 seconds ──────────────────────────────────
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            if (assets.length === 0 && watchlist.length === 0) return;
+            const [ea, ew] = await Promise.all([
+                enrichWithPrice(assets),
+                enrichWithPrice(watchlist),
+            ]);
+            setAssets(ea as Asset[]);
+            setWatchlist(ew as WatchlistItem[]);
+        }, 60_000);
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [assets.length, watchlist.length]);
+
+    // ── Public refresh ────────────────────────────────────────────────────────
+    const refreshData = useCallback(async () => {
+        if (!userId) return;
+        await loadFromSupabase(userId);
+    }, [userId, loadFromSupabase]);
+
+    // ── Add Asset ─────────────────────────────────────────────────────────────
+    const addAsset = useCallback(async (newAsset: Asset) => {
+        if (!userId) return;
+        const { error } = await supabase.from("user_portfolio").upsert(
+            {
+                user_id: userId,
+                symbol: newAsset.symbol,
+                name: newAsset.name,
+                quantity: newAsset.quantity,
+                avg_price: newAsset.avgPrice,
+            },
+            { onConflict: "user_id,symbol" }
+        );
+        if (!error) {
+            const enriched = await enrichWithPrice([newAsset]);
+            setAssets((prev) => {
+                const without = prev.filter((a) => a.symbol !== newAsset.symbol);
+                return [...without, enriched[0] as Asset];
+            });
+        }
+    }, [userId, supabase]);
+
+    // ── Remove Asset ──────────────────────────────────────────────────────────
+    const removeAsset = useCallback(async (symbol: string) => {
+        if (!userId) return;
+        await supabase.from("user_portfolio").delete().eq("user_id", userId).eq("symbol", symbol);
+        setAssets((prev) => prev.filter((a) => a.symbol !== symbol));
+    }, [userId, supabase]);
+
+    // ── Add to Watchlist ──────────────────────────────────────────────────────
+    const addToWatchlist = useCallback(async (symbol: string) => {
+        if (!userId) return;
+        if (watchlist.find((w) => w.symbol === symbol)) return;
+        const { error } = await supabase.from("user_watchlist").upsert(
+            { user_id: userId, symbol },
+            { onConflict: "user_id,symbol" }
+        );
+        if (!error) {
+            const newItem: WatchlistItem = { symbol, name: symbol };
+            const enriched = await enrichWithPrice([newItem]);
+            setWatchlist((prev) => [...prev, enriched[0] as WatchlistItem]);
+        }
+    }, [userId, watchlist, supabase]);
+
+    // ── Remove from Watchlist ─────────────────────────────────────────────────
+    const removeFromWatchlist = useCallback(async (symbol: string) => {
+        if (!userId) return;
+        await supabase.from("user_watchlist").delete().eq("user_id", userId).eq("symbol", symbol);
+        setWatchlist((prev) => prev.filter((w) => w.symbol !== symbol));
+    }, [userId, supabase]);
 
     return (
-        <PortfolioContext.Provider value={{
-            assets,
-            watchlist,
-            addAsset,
-            removeAsset,
-            addToWatchlist,
-            removeFromWatchlist,
-            refreshData,
-            totalValue,
-            totalInvestment,
-            totalReturn,
-            totalReturnPercent
-        }}>
+        <PortfolioContext.Provider
+            value={{
+                assets,
+                watchlist,
+                isLoading,
+                addAsset,
+                removeAsset,
+                addToWatchlist,
+                removeFromWatchlist,
+                refreshData,
+                totalValue,
+                totalInvestment,
+                totalReturn,
+                totalReturnPercent,
+            }}
+        >
             {children}
         </PortfolioContext.Provider>
     );
 }
 
 export function usePortfolio() {
-    const context = useContext(PortfolioContext);
-    if (context === undefined) {
-        throw new Error('usePortfolio must be used within a PortfolioProvider');
-    }
-    return context;
+    const ctx = useContext(PortfolioContext);
+    if (!ctx) throw new Error("usePortfolio must be used within a PortfolioProvider");
+    return ctx;
 }

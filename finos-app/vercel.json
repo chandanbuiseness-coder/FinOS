@@ -4,5 +4,11 @@
             "source": "/api/py/:path*",
             "destination": "/api/index.py"
         }
-    ]
+    ],
+    "functions": {
+        "api/index.py": {
+            "runtime": "python3.12",
+            "maxDuration": 60
+        }
+    }
 }

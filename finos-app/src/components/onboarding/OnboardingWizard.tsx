@@ -60,45 +60,80 @@ export function OnboardingWizard() {
         );
     };
 
+    // Map display names → tradeable symbols for watchlist
+    const WATCHLIST_SYMBOL_MAP: Record<string, { symbol: string; name: string }> = {
+        "Nifty 50": { symbol: "^NSEI", name: "Nifty 50" },
+        "Sensex": { symbol: "^BSESN", name: "Sensex" },
+        "Bank Nifty": { symbol: "^NSEBANK", name: "Bank Nifty" },
+        "S&P 500": { symbol: "^GSPC", name: "S&P 500" },
+        "Bitcoin": { symbol: "BTC-USD", name: "Bitcoin" },
+        "Gold": { symbol: "GC=F", name: "Gold" },
+        "Tech Stocks": { symbol: "NIFTY_IT.NS", name: "Nifty IT" },
+    };
+
     const handleNext = async () => {
         if (currentStep < steps.length) {
             setCurrentStep(currentStep + 1);
         } else {
-            // Save onboarding data
             setIsLoading(true);
             try {
                 const { data: { user } } = await supabase.auth.getUser();
 
                 if (user) {
-                    const { error } = await supabase
-                        .from('user_onboarding')
-                        .upsert({
-                            user_id: user.id,
-                            wallet_balance: parseFloat(walletBalance) || 0,
-                            initial_portfolio: manualAssets,
-                            watchlist: selectedWatchlist,
-                            financial_goals: {
-                                primaryGoal,
-                                riskTolerance,
-                            },
-                        });
+                    // 1. Save onboarding meta (existing)
+                    await supabase.from('user_onboarding').upsert({
+                        user_id: user.id,
+                        wallet_balance: parseFloat(walletBalance) || 0,
+                        initial_portfolio: manualAssets,
+                        watchlist: selectedWatchlist,
+                        financial_goals: { primaryGoal, riskTolerance },
+                    });
 
-                    if (error) {
-                        console.error("Error saving onboarding data:", error);
-                        alert("Failed to save onboarding data. Please try again.");
-                        setIsLoading(false);
-                        return;
+                    // 2. Save manual assets → user_portfolio
+                    if (manualAssets.length > 0) {
+                        const portfolioRows = manualAssets.map((a) => ({
+                            user_id: user.id,
+                            symbol: a.symbol.toUpperCase(),
+                            name: a.symbol.toUpperCase(),
+                            quantity: a.quantity,
+                            avg_price: a.buyPrice,
+                        }));
+                        await supabase
+                            .from('user_portfolio')
+                            .upsert(portfolioRows, { onConflict: 'user_id,symbol' });
+                    }
+
+                    // 3. Save watchlist selections → user_watchlist
+                    if (selectedWatchlist.length > 0) {
+                        const watchlistRows = selectedWatchlist
+                            .map((item) => WATCHLIST_SYMBOL_MAP[item])
+                            .filter(Boolean)
+                            .map((w) => ({ user_id: user.id, symbol: w.symbol }));
+                        if (watchlistRows.length > 0) {
+                            await supabase
+                                .from('user_watchlist')
+                                .upsert(watchlistRows, { onConflict: 'user_id,symbol' });
+                        }
+                    }
+
+                    // 4. Save risk tolerance → user_settings
+                    if (riskTolerance) {
+                        await supabase.from('user_settings').upsert({
+                            user_id: user.id,
+                            risk_tolerance: riskTolerance,
+                        });
                     }
                 }
 
                 router.push("/dashboard");
             } catch (error) {
-                console.error("Error:", error);
+                console.error("Onboarding error:", error);
                 alert("An error occurred. Please try again.");
                 setIsLoading(false);
             }
         }
     };
+
 
     return (
         <Card className="w-[600px] bg-gray-900 border-gray-800 text-white">

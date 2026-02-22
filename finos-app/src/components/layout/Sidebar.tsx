@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   MessageSquare,
-  Newspaper,
+  BarChart2,
   Settings,
   PieChart,
   TrendingUp,
@@ -34,10 +34,10 @@ const routes = [
     color: "text-pink-700",
   },
   {
-    label: "News",
-    icon: Newspaper,
-    href: "/news",
-    color: "text-orange-700",
+    label: "Trades",
+    icon: BarChart2,
+    href: "/trades",
+    color: "text-orange-400",
   },
   {
     label: "Portfolio",
