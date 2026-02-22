@@ -2,9 +2,8 @@ fastapi==0.109.0
 uvicorn==0.27.0
 pydantic==2.6.0
 requests==2.31.0
+numpy==1.26.4
 pandas==2.2.0
 yfinance==0.2.36
 python-multipart==0.0.7
 pytz==2024.1
-# Removed google-generativeai SDK — now using direct REST API calls to Gemini
-# Groq is accessed via REST API too — no SDK needed
