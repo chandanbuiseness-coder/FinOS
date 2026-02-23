@@ -26,11 +26,13 @@ app.add_middleware(
 )
 
 # ── Scanner import ────────────────────────────────────────────────────────────
+# scanner.py lives at finos-app/scanner.py (root level) so Vercel only sees
+# api/index.py as the single serverless function.
 try:
-    from api.scanner import run_scan as _run_scan
+    from scanner import run_scan as _run_scan          # Vercel + local (cwd=finos-app)
 except ImportError:
     try:
-        from scanner import run_scan as _run_scan
+        from api.scanner import run_scan as _run_scan  # Legacy fallback
     except ImportError:
         _run_scan = None
 
