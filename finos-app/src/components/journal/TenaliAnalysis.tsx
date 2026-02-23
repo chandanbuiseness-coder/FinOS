@@ -101,7 +101,7 @@ export function TenaliAnalysis({ trades }: TenaliAnalysisProps) {
                         Tenali AI — Trading Coach
                     </DialogTitle>
                     <DialogDescription className="text-gray-400">
-                        Ab andhere mein mat trade karo — samjho apna pattern
+                        AI-powered insights into your trading performance — understand your patterns, fix your habits.
                     </DialogDescription>
                 </DialogHeader>
 

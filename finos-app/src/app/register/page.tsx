@@ -16,8 +16,8 @@ export default function RegisterPage() {
                         Quantra
                     </h1>
                 </div>
-                <p className="text-white font-semibold text-lg">Ab Andhere Mein Mat Trade Karo.</p>
-                <p className="text-gray-400 text-sm mt-1">Join 1,000+ Indian traders building real wealth</p>
+                <p className="text-white font-semibold text-lg">Stop Trading in the Dark.</p>
+                <p className="text-gray-400 text-sm mt-1">Join traders building real wealth with a complete system.</p>
             </div>
             <AuthForm type="register" />
         </div>

@@ -19,8 +19,8 @@ export default function OnboardingPage() {
                     </span>
                 </div>
                 <h1 className="text-xl font-semibold text-white">Welcome to Quantra 🎉</h1>
-                <p className="text-indigo-400 text-sm font-medium mt-1">Sirf Tips Nahi. Ek Poora System.</p>
-                <p className="text-gray-500 text-xs mt-0.5">India ka pehla intelligent trading platform</p>
+                <p className="text-indigo-400 text-sm font-medium mt-1">Not Just Tips. A Complete System.</p>
+                <p className="text-gray-500 text-xs mt-0.5">Set up your account in 3 quick steps</p>
             </div>
 
             <div className="w-full max-w-4xl flex justify-end mb-3">

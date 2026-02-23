@@ -19,7 +19,7 @@ export function ChatWindow() {
         {
             id: "1",
             role: "assistant",
-            content: "Namaste! Main hoon Tenali AI — Quantra ka intelligent trading co-pilot. \ud83d\ude80 Aaj kya analyze karein?",
+            content: "Hello! I'm Tenali AI — Quantra's intelligent trading co-pilot. 🚀 What would you like to analyze today?",
             timestamp: new Date().toLocaleTimeString(),
         },
     ]);

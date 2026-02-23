@@ -44,7 +44,7 @@ export function Sidebar() {
 
         {/* Tagline */}
         <p className="text-xs text-gray-500 italic pl-3 mb-8 leading-tight">
-          Sirf Tips Nahi. Ek Poora System.
+          Not Just Tips. A Complete System.
         </p>
 
         {/* Nav links */}
@@ -67,10 +67,10 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Footer tagline */}
+      {/* Footer */}
       <div className="px-6 pb-4">
         <p className="text-[10px] text-gray-600 leading-tight">
-          Ab Andhere Mein Mat Trade Karo.
+          Stop trading in the dark. Build a real system.
         </p>
         <p className="text-[10px] text-gray-700 mt-0.5">quantra.in</p>
       </div>

@@ -6,8 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Send, Loader2, BrainCircuit, TrendingUp, PieChart, BarChart3, Zap } from "lucide-react";
 import { chatWithTenali } from "@/lib/api/tenali";
 
-export const metadata = { title: "Tenali AI" };
-
 interface Message {
     role: 'user' | 'assistant';
     content: string;
@@ -17,7 +15,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([
         {
             role: 'assistant',
-            content: "Namaste! Main hoon Tenali AI — Quantra ka intelligent trading co-pilot. 🚀\n\nMain aapki help kar sakta hoon:\n• Market analysis (NSE/BSE)\n• Portfolio insights aur risk assessment\n• Trade setups with entry ₹, SL ₹, target ₹\n• F&O strategies aur technical analysis\n\nKya poochna chahte ho? Ab andhere mein mat trade karo! 💡",
+            content: "Hello! I'm Tenali AI — Quantra's intelligent trading co-pilot. 🚀\n\nI can help you with:\n• Market analysis (NSE/BSE/Global)\n• Portfolio insights and risk assessment\n• Trade setups with entry, stop-loss, and target\n• Options strategies and technical analysis\n\nWhat would you like to analyze today?",
         },
     ]);
     const [input, setInput] = useState('');
@@ -60,7 +58,7 @@ export default function ChatPage() {
             console.error('Tenali AI error:', error);
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: 'Oops! Kuch technical issue aa gayi. Please thodi der baad try karo. 🙏',
+                content: 'Sorry, something went wrong. Please try again in a moment.',
             }]);
         } finally {
             setIsStreaming(false);
@@ -68,11 +66,11 @@ export default function ChatPage() {
     };
 
     const quickActions = [
-        { label: 'Portfolio Analysis', icon: PieChart, query: 'Mera portfolio analyze karo aur insights do — kya strong hai, kya weak hai?' },
-        { label: 'Market Overview', icon: TrendingUp, query: 'Aaj ka market overview do — Nifty, Bank Nifty, global cues sab ke saath.' },
-        { label: 'Nifty 50 Analysis', icon: BarChart3, query: 'Nifty 50 ka technical aur fundamental analysis do — support, resistance, trend.' },
-        { label: 'Risk Assessment', icon: BrainCircuit, query: 'Mera portfolio risk assess karo — concentration risk, sector exposure, max drawdown.' },
-        { label: 'Build My System 🔥', icon: Zap, query: 'Ab andhere mein mat trade karo — help me build a complete trading system with entry rules, exit rules, position sizing, and journaling.' },
+        { label: 'Portfolio Analysis', icon: PieChart, query: 'Analyze my current portfolio — what is strong, what is weak, and what should I watch?' },
+        { label: 'Market Overview', icon: TrendingUp, query: 'Give me a comprehensive market overview for today — Nifty, Bank Nifty, global cues.' },
+        { label: 'Nifty 50 Analysis', icon: BarChart3, query: 'Provide technical and fundamental analysis of Nifty 50 — support, resistance, trend.' },
+        { label: 'Risk Assessment', icon: BrainCircuit, query: 'Assess the risk in my current portfolio — concentration risk, sector exposure, max drawdown.' },
+        { label: 'Build My System', icon: Zap, query: 'Help me build a complete trading system with entry rules, exit rules, position sizing, and journaling.' },
     ];
 
     return (
@@ -125,7 +123,7 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions + Input */}
             <div className="border-t border-gray-800 p-4 space-y-3 bg-gray-950/60">
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                     {quickActions.map((action, i) => {
@@ -145,7 +143,6 @@ export default function ChatPage() {
                     })}
                 </div>
 
-                {/* Input */}
                 <div className="flex gap-2">
                     <Input
                         value={input}
@@ -169,7 +166,7 @@ export default function ChatPage() {
                 </div>
 
                 <p className="text-[10px] text-gray-600 text-center">
-                    Tenali AI provides educational analysis only — not SEBI-registered investment advice. Always do your own research.
+                    Tenali AI provides educational analysis only — not registered investment advice. Always do your own research.
                 </p>
             </div>
         </div>

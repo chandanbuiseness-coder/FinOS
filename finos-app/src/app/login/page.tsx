@@ -16,8 +16,8 @@ export default function LoginPage() {
                         Quantra
                     </h1>
                 </div>
-                <p className="text-white font-semibold text-lg">Sirf Tips Nahi. Ek Poora System.</p>
-                <p className="text-gray-400 text-sm mt-1">Not Just Tips. A Complete System.</p>
+                <p className="text-white font-semibold text-lg">Not Just Tips. A Complete System.</p>
+                <p className="text-gray-400 text-sm mt-1">Welcome back — your trades are waiting.</p>
             </div>
             <AuthForm type="login" />
         </div>

@@ -20,11 +20,11 @@ export const metadata: Metadata = {
     default: "Quantra — Not Just Tips. A Complete System.",
     template: "%s | Quantra",
   },
-  description: "Quantra — India's intelligent trading platform. Algo signals, AI coaching via Tenali AI, trading journal, and wealth building for retail traders. Sirf Tips Nahi. Ek Poora System.",
-  keywords: ["Quantra", "Indian stock market", "NSE trading", "algo trading India", "retail trader", "trade signals", "Tenali AI", "Nifty 50"],
+  description: "Quantra — The intelligent trading platform for serious traders. Algo signals, Tenali AI coaching, trading journal, and portfolio analytics. Not just tips — a complete trading system.",
+  keywords: ["Quantra", "trading platform", "stock market", "NSE trading", "algo trading", "retail trader", "trade signals", "Tenali AI", "Nifty 50", "portfolio analytics"],
   openGraph: {
     title: "Quantra — Not Just Tips. A Complete System.",
-    description: "Ab Andhere Mein Mat Trade Karo. India's intelligent trading platform for retail traders.",
+    description: "The intelligent trading platform for serious traders. Build a real system, not just trade on tips.",
     siteName: "Quantra",
   },
 };

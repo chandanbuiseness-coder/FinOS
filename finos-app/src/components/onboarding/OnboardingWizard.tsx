@@ -13,8 +13,8 @@ import { createClient } from "@/lib/supabase/client";
 
 const steps = [
     { id: 1, title: "Connect Portfolio", description: "Link your broker or add assets manually. Quantra tracks your P&L in real-time." },
-    { id: 2, title: "Apna Watchlist Banao", description: "Track what matters to you — indices, stocks, crypto." },
-    { id: 3, title: "Apna Trading Goal Set Karo", description: "Tenali AI aapke goal ke hisaab se guide karega." },
+    { id: 2, title: "Set Up Your Watchlist", description: "Track the markets that matter to you — indices, stocks, and crypto." },
+    { id: 3, title: "Set Your Trading Goal", description: "Tell Tenali AI what you want to achieve — it will guide you accordingly." },
 ];
 
 interface Asset {
@@ -333,7 +333,7 @@ export function OnboardingWizard() {
                     disabled={isLoading}
                     className="bg-indigo-600 hover:bg-indigo-700"
                 >
-                    {isLoading ? "Saving..." : currentStep === steps.length ? "Dashboard Dekho →" : "Next Step"}
+                    {isLoading ? "Saving..." : currentStep === steps.length ? "Go to Dashboard →" : "Next Step"}
                 </Button>
             </CardFooter>
         </Card>
