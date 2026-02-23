@@ -11,7 +11,15 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const API = process.env.NEXT_PUBLIC_TENALI_API_URL || "/api/py";
+// Smart URL: if env var is a localhost URL but we're on a real domain (Vercel/prod),
+// fall back to the relative /api/py path so the call hits the Vercel serverless function.
+function getApiBase(): string {
+    const raw = process.env.NEXT_PUBLIC_TENALI_API_URL || "/api/py";
+    if (typeof window !== "undefined" && raw.includes("localhost") && !window.location.hostname.includes("localhost")) {
+        return "/api/py";
+    }
+    return raw;
+}
 
 type ScanType = "intraday" | "swing" | "longterm";
 
@@ -156,13 +164,26 @@ export default function TradesPage() {
         setLoading(true);
         setError("");
         setResult(null);
+        const controller = new AbortController();
+        // 55s timeout — gives Vercel serverless enough time for a cold-start scan
+        const tid = setTimeout(() => controller.abort(), 55_000);
         try {
-            const res = await fetch(`${API}/scanner?type=${type}`);
-            if (!res.ok) throw new Error(`Server error ${res.status}`);
+            const api = getApiBase();
+            const res = await fetch(`${api}/scanner?type=${type}`, { signal: controller.signal });
+            clearTimeout(tid);
+            if (!res.ok) {
+                const detail = await res.text().catch(() => "");
+                throw new Error(`Server error ${res.status}${detail ? `: ${detail}` : ""}`);
+            }
             const data = await res.json();
             setResult(data);
         } catch (e: any) {
-            setError(e.message || "Failed to run scan. Is the backend running?");
+            clearTimeout(tid);
+            if (e.name === "AbortError") {
+                setError("Scan timed out after 55s. The server is processing a large universe — please try again, subsequent runs are faster.");
+            } else {
+                setError(e.message || "Failed to run scan.");
+            }
         } finally {
             setLoading(false);
         }
@@ -230,20 +251,25 @@ export default function TradesPage() {
             {loading && (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <Loader2 className="h-10 w-10 animate-spin text-indigo-400" />
-                    <p className="text-gray-400">Running algorithms on Nifty 50…</p>
-                    <p className="text-xs text-gray-600">This may take 15–30 seconds (first run fetches live data)</p>
+                    <p className="text-gray-400">Running algorithms on Nifty 500…</p>
+                    <p className="text-xs text-gray-600">First run fetches live data for 200 stocks — takes ~30–50s. Subsequent runs are instant (cached).</p>
                 </div>
             )}
 
             {/* State: error */}
             {!loading && error && (
                 <Card className="border-red-900/40 bg-red-950/10">
-                    <CardContent className="pt-6 flex items-center gap-3">
-                        <ShieldAlert className="h-6 w-6 text-red-400 shrink-0" />
-                        <div>
+                    <CardContent className="pt-6 flex items-start gap-3">
+                        <ShieldAlert className="h-6 w-6 text-red-400 shrink-0 mt-0.5" />
+                        <div className="space-y-2">
                             <p className="text-red-400 font-medium">Scan Failed</p>
-                            <p className="text-gray-400 text-sm mt-1">{error}</p>
-                            <p className="text-gray-500 text-xs mt-1">Make sure the Python backend is running: <code className="bg-gray-800 px-1 rounded">python -m uvicorn api.index:app --reload --port 8000</code></p>
+                            <p className="text-gray-400 text-sm">{error}</p>
+                            <div className="text-xs text-gray-500 space-y-1 pt-1 border-t border-gray-800">
+                                <p className="font-medium text-gray-400">Troubleshooting:</p>
+                                <p>• <span className="text-indigo-400">On Vercel</span>: Do NOT set <code className="bg-gray-800 px-1 rounded">NEXT_PUBLIC_TENALI_API_URL</code> in environment variables — leave it blank so it auto-routes to <code className="bg-gray-800 px-1 rounded">/api/py</code>.</p>
+                                <p>• <span className="text-indigo-400">Local dev</span>: Ensure the backend is running on port 8000: <code className="bg-gray-800 px-1 rounded">python -m uvicorn api.index:app --reload --port 8000</code></p>
+                                <p>• First scan takes ~30–50s on cold start. Click <strong>Refresh</strong> to retry.</p>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

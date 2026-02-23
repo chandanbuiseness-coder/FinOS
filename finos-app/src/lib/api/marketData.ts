@@ -1,6 +1,7 @@
 // Market Data API Integration (Free Tier)
 // Alpha Vantage + CoinGecko + Yahoo Finance
 
+import { getTenaliApiUrl } from './apiUrl';
 const ALPHA_VANTAGE_KEY = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_KEY || 'demo';
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 
@@ -119,40 +120,71 @@ export async function fetchForexRate(fromCurrency: string, toCurrency: string) {
     }
 }
 
-// World Indices — fetched from the Python backend (yFinance + Gemini fallback)
+// World Indices — 3-tier fallback: Python backend → JS /api/market route → static demo
 export async function fetchIndices() {
     const cacheKey = 'indices';
     const cached = getCached(cacheKey);
     if (cached) return cached;
 
+    // ── Tier 1: Python backend (yFinance, full data) ─────────────────────────
     try {
-        const API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || '/api/py';
-        const resp = await fetch(`${API_URL}/market`, { cache: 'no-store' });
-        if (!resp.ok) throw new Error('Market API unavailable');
-        const json = await resp.json();
-        const items = (json.items ?? []).filter((i: any) => i.type === 'INDEX');
-        const indices = items.map((i: any) => ({
-            symbol: i.symbol,
-            name: i.name,
-            price: i.price,
-            change: i.change,
-            changePercent: `${i.change_percent >= 0 ? '+' : ''}${i.change_percent.toFixed(2)}%`,
-            status: i.status ?? 'Unknown',
-        }));
-        setCache(cacheKey, indices);
-        return indices;
-    } catch {
-        // Fallback static values
-        const indices = [
-            { symbol: '^NSEI', name: 'Nifty 50', price: 22150.50, change: 125.30, changePercent: '+0.57%', status: 'Unknown' },
-            { symbol: '^BSESN', name: 'Sensex', price: 73250.25, change: 320.75, changePercent: '+0.44%', status: 'Unknown' },
-            { symbol: '^GSPC', name: 'S&P 500', price: 4850.20, change: -15.40, changePercent: '-0.32%', status: 'Unknown' },
-            { symbol: '^DJI', name: 'Dow Jones', price: 38200.50, change: 85.20, changePercent: '+0.22%', status: 'Unknown' },
-            { symbol: '^IXIC', name: 'Nasdaq', price: 15350.75, change: -45.30, changePercent: '-0.29%', status: 'Unknown' },
-        ];
-        setCache(cacheKey, indices);
-        return indices;
-    }
+        const API_URL = getTenaliApiUrl();
+        const skip = typeof window !== 'undefined'
+            && API_URL.includes('localhost')
+            && !window.location.hostname.includes('localhost');
+        if (!skip) {
+            const resp = await fetch(`${API_URL}/market`, {
+                cache: 'no-store',
+                signal: AbortSignal.timeout(6000),
+            });
+            if (resp.ok) {
+                const json = await resp.json();
+                const items = (json.items ?? []).filter((i: any) => i.type === 'INDEX');
+                if (items.length > 0) {
+                    const indices = items.map((i: any) => ({
+                        symbol: i.symbol, name: i.name, price: i.price,
+                        change: i.change,
+                        changePercent: `${i.change_percent >= 0 ? '+' : ''}${i.change_percent.toFixed(2)}%`,
+                        status: i.status ?? 'Live',
+                    }));
+                    setCache(cacheKey, indices);
+                    return indices;
+                }
+            }
+        }
+    } catch { /* fall through */ }
+
+    // ── Tier 2: Next.js JS route — live Yahoo Finance, no Python needed ───────
+    try {
+        const resp = await fetch('/api/market', {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(8000),
+        });
+        if (resp.ok) {
+            const json = await resp.json();
+            const items = (json.items ?? []).filter((i: any) => i.price > 0);
+            if (items.length > 0) {
+                const indices = items.map((i: any) => ({
+                    symbol: i.symbol, name: i.name, price: i.price,
+                    change: i.change,
+                    changePercent: `${i.change_percent >= 0 ? '+' : ''}${i.change_percent.toFixed(2)}%`,
+                    status: 'Live',
+                }));
+                setCache(cacheKey, indices);
+                return indices;
+            }
+        }
+    } catch { /* fall through */ }
+
+    // ── Tier 3: Static demo — approximate Feb 2026 levels ────────────────────
+    return [
+        { symbol: '^NSEI', name: 'Nifty 50', price: 23000, change: 0, changePercent: '0.00%', status: 'Demo' },
+        { symbol: '^BSESN', name: 'Sensex', price: 76000, change: 0, changePercent: '0.00%', status: 'Demo' },
+        { symbol: '^NSEBANK', name: 'Bank Nifty', price: 49000, change: 0, changePercent: '0.00%', status: 'Demo' },
+        { symbol: '^GSPC', name: 'S&P 500', price: 6000, change: 0, changePercent: '0.00%', status: 'Demo' },
+        { symbol: '^DJI', name: 'Dow Jones', price: 44000, change: 0, changePercent: '0.00%', status: 'Demo' },
+        { symbol: '^IXIC', name: 'Nasdaq', price: 20000, change: 0, changePercent: '0.00%', status: 'Demo' },
+    ];
 }
 
 // Commodities (Alpha Vantage or Mock)

@@ -1,7 +1,9 @@
 // Tenali LLM API Client
 // This will connect to your custom-trained Tenali model when deployed
 
-const TENALI_API_URL = process.env.NEXT_PUBLIC_TENALI_API_URL || '/api/py';
+import { getTenaliApiUrl } from './apiUrl';
+
+const TENALI_API_URL = getTenaliApiUrl();
 
 export interface TenaliMessage {
     role: 'system' | 'user' | 'assistant';

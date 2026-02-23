@@ -1,4 +1,5 @@
 "use client";
+import { getTenaliApiUrl } from '@/lib/api/apiUrl';
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
