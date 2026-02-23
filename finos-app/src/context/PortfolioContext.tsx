@@ -99,8 +99,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(true);
         try {
             // ── 1. Migrate localStorage if data exists ────────────────────────
-            const lsAssets = localStorage.getItem("finos_assets");
-            const lsWatchlist = localStorage.getItem("finos_watchlist");
+            const lsAssets = localStorage.getItem("finos_assets") || localStorage.getItem("quantra_assets");
+            const lsWatchlist = localStorage.getItem("finos_watchlist") || localStorage.getItem("quantra_watchlist");
 
             if (lsAssets) {
                 try {
@@ -115,7 +115,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
                         }));
                         await supabase.from("user_portfolio").upsert(rows, { onConflict: "user_id,symbol" });
                         localStorage.removeItem("finos_assets");
-                        console.log("[FinOS] Migrated portfolio from localStorage → Supabase");
+                        localStorage.removeItem("quantra_assets");
+                        console.log("[Quantra] Migrated portfolio from localStorage → Supabase");
                     }
                 } catch { }
             }
@@ -127,7 +128,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
                         const rows = parsed.map((w) => ({ user_id: uid, symbol: w.symbol }));
                         await supabase.from("user_watchlist").upsert(rows, { onConflict: "user_id,symbol" });
                         localStorage.removeItem("finos_watchlist");
-                        console.log("[FinOS] Migrated watchlist from localStorage → Supabase");
+                        localStorage.removeItem("quantra_watchlist");
+                        console.log("[Quantra] Migrated watchlist from localStorage → Supabase");
                     }
                 } catch { }
             }
@@ -159,7 +161,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
             setAssets(enrichedAssets as Asset[]);
             setWatchlist(enrichedWatchlist as WatchlistItem[]);
         } catch (err) {
-            console.error("[FinOS] Error loading portfolio:", err);
+            console.error("[Quantra] Error loading portfolio:", err);
         } finally {
             setIsLoading(false);
         }

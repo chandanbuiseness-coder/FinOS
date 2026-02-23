@@ -75,7 +75,7 @@ export function TenaliAnalysis({ trades }: TenaliAnalysisProps) {
             setAnalysis(data);
         } catch (err: any) {
             console.error("Tenali analysis error:", err);
-            setError("Tenali is temporarily unavailable. Please try again in a moment.");
+            setError("Tenali AI is temporarily unavailable. Please try again in a moment.");
         } finally {
             setIsAnalyzing(false);
         }
@@ -90,7 +90,7 @@ export function TenaliAnalysis({ trades }: TenaliAnalysisProps) {
                     onClick={handleAnalyze}
                 >
                     <BrainCircuit className="mr-2 h-4 w-4" />
-                    Analyze with Tenali
+                    Analyze with Tenali AI
                 </Button>
             </DialogTrigger>
 
@@ -98,10 +98,10 @@ export function TenaliAnalysis({ trades }: TenaliAnalysisProps) {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <BrainCircuit className="h-5 w-5 text-indigo-400" />
-                        Tenali AI — Trading Analysis
+                        Tenali AI — Trading Coach
                     </DialogTitle>
                     <DialogDescription className="text-gray-400">
-                        Real AI-powered insights into your trading performance
+                        Ab andhere mein mat trade karo — samjho apna pattern
                     </DialogDescription>
                 </DialogHeader>
 
@@ -111,7 +111,7 @@ export function TenaliAnalysis({ trades }: TenaliAnalysisProps) {
                             <div className="w-16 h-16 rounded-full border-4 border-indigo-600/30 border-t-indigo-600 animate-spin" />
                             <BrainCircuit className="absolute inset-0 m-auto h-7 w-7 text-indigo-400" />
                         </div>
-                        <p className="text-gray-400 text-sm">Tenali is analyzing your {trades.length} trades…</p>
+                        <p className="text-gray-400 text-sm">Tenali AI is analyzing your {trades.length} trades…</p>
                         <p className="text-gray-600 text-xs">Reviewing patterns, emotions & risk/reward ratios</p>
                     </div>
                 )}

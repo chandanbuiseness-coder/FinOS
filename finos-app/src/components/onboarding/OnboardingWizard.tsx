@@ -12,9 +12,9 @@ import { Link as LinkIcon, Plus, CheckCircle2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const steps = [
-    { id: 1, title: "Connect Portfolio", description: "Link your brokerage account or add assets manually." },
-    { id: 2, title: "Setup Watchlist", description: "Select the assets you want to track." },
-    { id: 3, title: "Financial Goals", description: "Tell us what you want to achieve." },
+    { id: 1, title: "Connect Portfolio", description: "Link your broker or add assets manually. Quantra tracks your P&L in real-time." },
+    { id: 2, title: "Apna Watchlist Banao", description: "Track what matters to you — indices, stocks, crypto." },
+    { id: 3, title: "Apna Trading Goal Set Karo", description: "Tenali AI aapke goal ke hisaab se guide karega." },
 ];
 
 interface Asset {
@@ -333,7 +333,7 @@ export function OnboardingWizard() {
                     disabled={isLoading}
                     className="bg-indigo-600 hover:bg-indigo-700"
                 >
-                    {isLoading ? "Saving..." : currentStep === steps.length ? "Finish Setup" : "Next Step"}
+                    {isLoading ? "Saving..." : currentStep === steps.length ? "Dashboard Dekho →" : "Next Step"}
                 </Button>
             </CardFooter>
         </Card>

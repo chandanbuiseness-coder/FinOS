@@ -16,8 +16,17 @@ import { PortfolioProvider } from "@/context/PortfolioContext";
 import ClientLayout from "@/components/layout/ClientLayout";
 
 export const metadata: Metadata = {
-  title: "FinOS - AI Financial Assistant",
-  description: "Your expert financial advisor and trading companion.",
+  title: {
+    default: "Quantra — Not Just Tips. A Complete System.",
+    template: "%s | Quantra",
+  },
+  description: "Quantra — India's intelligent trading platform. Algo signals, AI coaching via Tenali AI, trading journal, and wealth building for retail traders. Sirf Tips Nahi. Ek Poora System.",
+  keywords: ["Quantra", "Indian stock market", "NSE trading", "algo trading India", "retail trader", "trade signals", "Tenali AI", "Nifty 50"],
+  openGraph: {
+    title: "Quantra — Not Just Tips. A Complete System.",
+    description: "Ab Andhere Mein Mat Trade Karo. India's intelligent trading platform for retail traders.",
+    siteName: "Quantra",
+  },
 };
 
 export default function RootLayout({

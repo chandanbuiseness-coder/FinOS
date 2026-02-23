@@ -184,7 +184,7 @@ export function StockSearch() {
                                 className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors text-sm font-medium"
                             >
                                 <MessageSquare className="h-4 w-4" />
-                                Analyze with Tenali
+                                Ask Tenali AI
                             </button>
                         </div>
                     </div>

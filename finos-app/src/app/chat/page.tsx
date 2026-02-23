@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2, BrainCircuit, TrendingUp, PieChart, BarChart3 } from "lucide-react";
+import { Send, Loader2, BrainCircuit, TrendingUp, PieChart, BarChart3, Zap } from "lucide-react";
 import { chatWithTenali } from "@/lib/api/tenali";
+
+export const metadata = { title: "Tenali AI" };
 
 interface Message {
     role: 'user' | 'assistant';
@@ -15,7 +17,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([
         {
             role: 'assistant',
-            content: "Hello! I'm Tenali, your AI financial analyst. I can help you with market analysis, portfolio insights, technical analysis, and financial education. What would you like to know?",
+            content: "Namaste! Main hoon Tenali AI — Quantra ka intelligent trading co-pilot. 🚀\n\nMain aapki help kar sakta hoon:\n• Market analysis (NSE/BSE)\n• Portfolio insights aur risk assessment\n• Trade setups with entry ₹, SL ₹, target ₹\n• F&O strategies aur technical analysis\n\nKya poochna chahte ho? Ab andhere mein mat trade karo! 💡",
         },
     ]);
     const [input, setInput] = useState('');
@@ -55,10 +57,10 @@ export default function ChatPage() {
                 setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
             }
         } catch (error) {
-            console.error('Tenali error:', error);
+            console.error('Tenali AI error:', error);
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: 'I apologize, but I encountered an error. Please try again.',
+                content: 'Oops! Kuch technical issue aa gayi. Please thodi der baad try karo. 🙏',
             }]);
         } finally {
             setIsStreaming(false);
@@ -66,23 +68,29 @@ export default function ChatPage() {
     };
 
     const quickActions = [
-        { label: 'Analyze My Portfolio', icon: PieChart, query: 'Analyze my current portfolio holdings and provide insights' },
-        { label: 'Market Overview', icon: TrendingUp, query: 'Give me a comprehensive market overview for today' },
-        { label: 'Nifty 50 Analysis', icon: BarChart3, query: 'Provide technical and fundamental analysis of Nifty 50' },
-        { label: 'Risk Assessment', icon: BrainCircuit, query: 'Assess the risk in my current portfolio' },
+        { label: 'Portfolio Analysis', icon: PieChart, query: 'Mera portfolio analyze karo aur insights do — kya strong hai, kya weak hai?' },
+        { label: 'Market Overview', icon: TrendingUp, query: 'Aaj ka market overview do — Nifty, Bank Nifty, global cues sab ke saath.' },
+        { label: 'Nifty 50 Analysis', icon: BarChart3, query: 'Nifty 50 ka technical aur fundamental analysis do — support, resistance, trend.' },
+        { label: 'Risk Assessment', icon: BrainCircuit, query: 'Mera portfolio risk assess karo — concentration risk, sector exposure, max drawdown.' },
+        { label: 'Build My System 🔥', icon: Zap, query: 'Ab andhere mein mat trade karo — help me build a complete trading system with entry rules, exit rules, position sizing, and journaling.' },
     ];
 
     return (
         <div className="flex flex-col h-screen bg-gray-950">
             {/* Header */}
-            <div className="border-b border-gray-800 p-4">
+            <div className="border-b border-gray-800 p-4 bg-gray-950/80 backdrop-blur">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-600 rounded-lg">
+                    <div className="p-2 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg shadow-indigo-900/50">
                         <BrainCircuit className="h-6 w-6 text-white" />
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-white">Tenali AI</h1>
-                        <p className="text-sm text-gray-400">Your Financial Intelligence Assistant</p>
+                        <p className="text-xs text-indigo-400">Quantra's intelligent trading co-pilot</p>
+                    </div>
+                    <div className="ml-auto">
+                        <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-400 border border-emerald-700/40 font-medium">
+                            ● Live
+                        </span>
                     </div>
                 </div>
             </div>
@@ -91,9 +99,14 @@ export default function ChatPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-4 whitespace-pre-wrap ${msg.role === 'user'
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-gray-800 text-gray-100 border border-gray-700'
+                        {msg.role === 'assistant' && (
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center mr-2 mt-1 shrink-0">
+                                <BrainCircuit className="h-3.5 w-3.5 text-white" />
+                            </div>
+                        )}
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 whitespace-pre-wrap text-sm ${msg.role === 'user'
+                            ? 'bg-indigo-600 text-white rounded-tr-sm'
+                            : 'bg-gray-800/80 text-gray-100 border border-gray-700/50 rounded-tl-sm'
                             }`}>
                             {msg.content}
                         </div>
@@ -101,8 +114,11 @@ export default function ChatPage() {
                 ))}
                 {isStreaming && (
                     <div className="flex justify-start">
-                        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                            <Loader2 className="h-5 w-5 text-indigo-400 animate-spin" />
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center mr-2 shrink-0">
+                            <BrainCircuit className="h-3.5 w-3.5 text-white" />
+                        </div>
+                        <div className="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 border border-gray-700/50">
+                            <Loader2 className="h-4 w-4 text-indigo-400 animate-spin" />
                         </div>
                     </div>
                 )}
@@ -110,8 +126,8 @@ export default function ChatPage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="border-t border-gray-800 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="border-t border-gray-800 p-4 space-y-3 bg-gray-950/60">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                     {quickActions.map((action, i) => {
                         const Icon = action.icon;
                         return (
@@ -119,11 +135,11 @@ export default function ChatPage() {
                                 key={i}
                                 variant="outline"
                                 onClick={() => setInput(action.query)}
-                                className="h-auto py-3 flex flex-col items-center gap-2 border-gray-700 bg-gray-800 hover:bg-gray-700 text-white"
+                                className="h-auto py-2.5 flex flex-col items-center gap-1.5 border-gray-700/60 bg-gray-800/60 hover:bg-gray-700/80 hover:border-indigo-600/60 text-white transition-all"
                                 disabled={isStreaming}
                             >
-                                <Icon className="h-5 w-5 text-indigo-400" />
-                                <span className="text-xs">{action.label}</span>
+                                <Icon className="h-4 w-4 text-indigo-400" />
+                                <span className="text-[10px] leading-tight text-center">{action.label}</span>
                             </Button>
                         );
                     })}
@@ -134,15 +150,15 @@ export default function ChatPage() {
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                        placeholder="Ask Tenali anything about finance..."
-                        className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                        placeholder="Ask Tenali AI about markets, trades, or your portfolio..."
+                        className="flex-1 bg-gray-800/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-indigo-600 rounded-xl"
                         disabled={isStreaming}
                     />
                     <Button
                         onClick={handleSend}
                         disabled={isStreaming || !input.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-700"
+                        className="bg-indigo-600 hover:bg-indigo-500 rounded-xl px-4"
                     >
                         {isStreaming ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -152,8 +168,8 @@ export default function ChatPage() {
                     </Button>
                 </div>
 
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                    Tenali provides educational analysis only. Not financial advice.
+                <p className="text-[10px] text-gray-600 text-center">
+                    Tenali AI provides educational analysis only — not SEBI-registered investment advice. Always do your own research.
                 </p>
             </div>
         </div>

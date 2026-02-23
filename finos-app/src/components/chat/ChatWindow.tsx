@@ -19,7 +19,7 @@ export function ChatWindow() {
         {
             id: "1",
             role: "assistant",
-            content: "Hello! I am FinOS. How can I assist you with your financial journey today? I can analyze markets, review your portfolio, or explain complex economic concepts.",
+            content: "Namaste! Main hoon Tenali AI — Quantra ka intelligent trading co-pilot. \ud83d\ude80 Aaj kya analyze karein?",
             timestamp: new Date().toLocaleTimeString(),
         },
     ]);
@@ -49,8 +49,8 @@ export function ChatWindow() {
         <div className="flex flex-col h-full bg-[#0a0a0a]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Financial Assistant</h2>
-                    <p className="text-xs text-gray-400">Powered by Custom Finance LLM</p>
+                    <h2 className="text-lg font-semibold text-white">Tenali AI</h2>
+                    <p className="text-xs text-gray-400">Quantra's intelligent trading co-pilot</p>
                 </div>
                 <PersonaSelector currentPersona={persona} onPersonaChange={setPersona} />
             </div>

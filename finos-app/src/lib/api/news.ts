@@ -1,4 +1,4 @@
-// News API Integration for FinOS
+// News API Integration for Quantra
 // Provides real-time financial news with auto-refresh
 
 const NEWS_API_KEY = process.env.NEXT_PUBLIC_NEWS_API_KEY || '';

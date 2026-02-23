@@ -284,14 +284,14 @@ def _gemini_generate(prompt: str, system: str = "") -> str:
 def _gemini_stream(messages: List[Dict], system: str = ""):
     """Stream from Gemini 2.0 Flash — yields text chunks."""
     if not GEMINI_API_KEY:
-        yield "Tenali is temporarily unavailable. Please try again in a moment."
+        yield "Tenali AI is temporarily unavailable — GEMINI_API_KEY not configured."
         return
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}"
     contents = []
     if system:
         # Gemini doesn't have a system role in v1beta, prepend as first user turn
         contents.append({"role": "user", "parts": [{"text": system}]})
-        contents.append({"role": "model", "parts": [{"text": "Understood. I am Tenali, your FinOS Chief Investment Officer."}]})
+        contents.append({"role": "model", "parts": [{"text": "Understood. I am Tenali AI — Quantra's intelligent trading co-pilot."}]})
     for msg in messages:
         role = "model" if msg["role"] == "assistant" else "user"
         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
@@ -312,12 +312,12 @@ def _gemini_stream(messages: List[Dict], system: str = ""):
                         except:
                             pass
     except Exception as e:
-        yield f"\n\n[Tenali encountered an issue: {str(e)}]"
+        yield f"\n\n[Tenali AI encountered an issue: {str(e)}]"
 
 def _groq_stream(messages: List[Dict], system: str = ""):
     """Stream from Groq Llama-3.1-8B — fallback when Gemini rate-limits."""
     if not GROQ_API_KEY:
-        yield "Tenali is busy right now. Please try again in a moment."
+        yield "Tenali AI is busy right now (Groq fallback unavailable). Please try again."
         return
     url = "https://api.groq.com/openai/v1/chat/completions"
     groq_messages = [{"role": "system", "content": system}] if system else []
@@ -345,7 +345,7 @@ def _groq_stream(messages: List[Dict], system: str = ""):
                         except:
                             pass
     except Exception as e:
-        yield f"\n\n[Tenali fallback error: {str(e)}]"
+        yield f"\n\n[Tenali AI groq-fallback error: {str(e)}]"
 
 def get_gemini_fallback(prompt_type: str, query) -> Optional[Dict]:
     """Use Gemini to generate fallback market/news data when APIs fail."""
@@ -526,9 +526,9 @@ async def get_news():
     # Final static fallback
     now = int(time.time())
     return {"items": [
-        {"title": "Nifty holds above 22,000; IT stocks lead gains", "publisher": "FinOS", "link": "#", "providerPublishTime": now, "image": "https://placehold.co/600x400/1e293b/ffffff?text=Nifty"},
-        {"title": "RBI policy decision: Repo rate unchanged at 6.5%", "publisher": "FinOS", "link": "#", "providerPublishTime": now - 3600, "image": "https://placehold.co/600x400/1e293b/ffffff?text=RBI"},
-        {"title": "FII inflows surge as global sentiment improves", "publisher": "FinOS", "link": "#", "providerPublishTime": now - 7200, "image": "https://placehold.co/600x400/1e293b/ffffff?text=FII"},
+        {"title": "Nifty consolidates near key support; IT and Banking lead", "publisher": "Quantra", "link": "#", "providerPublishTime": now, "image": "https://placehold.co/600x400/1e293b/ffffff?text=Nifty"},
+        {"title": "RBI maintains accommodative stance; markets react positively", "publisher": "Quantra", "link": "#", "providerPublishTime": now - 3600, "image": "https://placehold.co/600x400/1e293b/ffffff?text=RBI"},
+        {"title": "FII buying resumes; Nifty targets 25,000 in near term", "publisher": "Quantra", "link": "#", "providerPublishTime": now - 7200, "image": "https://placehold.co/600x400/1e293b/ffffff?text=FII"},
     ]}
 
 
@@ -596,16 +596,22 @@ async def get_quote(request: QuoteRequest):
 async def chat(request: ChatRequest):
     """
     Tenali AI chat — Gemini 2.0 Flash primary, Groq Llama-3.1-8B fallback.
+    Powered by Quantra — India's intelligent trading platform.
     """
     market_context = get_market_context()
     ist = pytz.timezone("Asia/Kolkata")
     nse_status = is_nse_open(datetime.now(ist))
 
-    system_prompt = f"""You are Tenali, FinOS's Chief Investment Officer and AI financial analyst.
-You have 20 years of NSE/BSE trading experience. You think like:
-- Rakesh Jhunjhunwala: High conviction, long-term compounding mindset
-- Radhakishan Damani: Patience, value identification, risk-first thinking  
-- A quant analyst: Data-driven, probability-based, systematic
+    system_prompt = f"""You are Tenali AI — the intelligent trading co-pilot of Quantra, India's premier financial intelligence platform for retail traders.
+
+Your identity:
+- You think like a senior quant analyst + experienced Indian trader combined
+- You speak in clear, direct Hinglish — never use jargon without explaining it
+- You have deep knowledge of NSE, BSE, Nifty, Bank Nifty, F&O, SEBI regulations
+- You always give specific, actionable advice: entry price in ₹, stop loss in ₹, target in ₹
+- You include position size guidance based on the 2% risk rule
+- You are honest — if a setup is weak or a trade is risky, you say so clearly
+- You never give generic global finance advice — everything is India-market specific
 
 Current Market Context: {market_context}
 NSE Market Status: {nse_status}
@@ -613,10 +619,11 @@ NSE Market Status: {nse_status}
 Rules:
 1. Lead with the bottom line — give the insight first, explain second
 2. Use Indian context: NSE/BSE tickers, ₹ currency, Indian regulations (SEBI)
-3. Be specific with numbers and levels; avoid vague statements
-4. Always mention risk — no trade setup without a stop-loss
-5. If asked for stock picks, give educational analysis only — remind user to do own research
-6. Keep responses concise but data-rich — traders want signal, not noise"""
+3. Be specific with numbers and levels — no vague statements
+4. Always mention risk — no trade setup without a stop-loss in ₹
+5. Educational analysis only — always remind user to do their own research
+6. Keep responses concise but data-rich — traders want signal, not noise
+7. End responses with: "Ab andhere mein mat trade karo. Quantra ke saath system banao. 💡""""
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
@@ -626,7 +633,7 @@ Rules:
 
     if not use_gemini and not use_groq:
         async def no_llm():
-            yield b"Tenali is currently unavailable - API keys not configured. Please check your environment variables."
+            yield b"Tenali AI is currently unavailable — API keys not configured. Please check your Quantra backend environment variables."
         return StreamingResponse(no_llm(), media_type="text/plain")
 
     async def gemini_with_fallback():
@@ -645,7 +652,7 @@ Rules:
                     for chunk in _groq_stream(messages, system_prompt):
                         yield chunk.encode("utf-8")
                 else:
-                    yield b"Tenali encountered an error. Please try again in a moment."
+                    yield b"Tenali AI encountered an error. Please try again in a moment."
 
     async def groq_only():
         for chunk in _groq_stream(messages, system_prompt):
