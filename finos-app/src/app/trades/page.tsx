@@ -45,6 +45,8 @@ interface ScanResult {
     count: number;
     universe: number;
     scanned_at: string;
+    market_status?: string;
+    session_target?: string;
     market_note: string;
 }
 

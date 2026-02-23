@@ -3,16 +3,6 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketTable, MarketItem } from "@/components/market/MarketTable";
-import { Loader2 } from "lucide-react";
-import {
-    fetchIndices,
-    fetchMultipleCryptos,
-    fetchForexRate,
-} from "@/lib/api/marketData";
-
-import { useState, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MarketTable, MarketItem } from "@/components/market/MarketTable";
 import { Loader2, TrendingUp, TrendingDown, Globe, Coins, Landmark, ArrowRight, Activity, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -162,28 +152,34 @@ export default function MarketPage() {
 
             {/* Quick Index Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {indices.map((idx) => (
-                    <Card key={idx.symbol} className="bg-gray-900/40 border-gray-800/60 backdrop-blur-md hover:bg-gray-800/40 transition-all group overflow-hidden relative">
-                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                            {idx.icon}
-                        </div>
-                        <CardContent className="p-5">
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">{idx.symbol}</p>
-                            <div className="flex items-baseline gap-2">
-                                <h3 className="text-xl font-bold text-white tabular-nums">
-                                    {(idx.price as number).toLocaleString("en-IN")}
-                                </h3>
-                                <div className={`flex items-center text-[11px] font-bold ${idx.changePercent >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                    {idx.changePercent >= 0 ? "+" : ""}{idx.changePercent}%
+                {indices.map((idx) => {
+                    const priceNum = typeof idx.price === "number" ? idx.price : parseFloat(String(idx.price).replace(/[^0-9.-]/g, ""));
+                    const changePercentNum = typeof idx.changePercent === "number" ? idx.changePercent : parseFloat(String(idx.changePercent).replace(/[^0-9.-]/g, ""));
+                    const isPos = changePercentNum >= 0;
+
+                    return (
+                        <Card key={idx.symbol} className="bg-gray-900/40 border-gray-800/60 backdrop-blur-md hover:bg-gray-800/40 transition-all group overflow-hidden relative">
+                            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                {idx.icon}
+                            </div>
+                            <CardContent className="p-5">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">{idx.symbol}</p>
+                                <div className="flex items-baseline gap-2">
+                                    <h3 className="text-xl font-bold text-white tabular-nums">
+                                        {isNaN(priceNum) ? idx.price : priceNum.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                    </h3>
+                                    <div className={`flex items-center text-[11px] font-bold ${isPos ? "text-green-400" : "text-red-400"}`}>
+                                        {isPos ? "+" : ""}{idx.changePercent}%
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between">
-                                <span className="text-[10px] text-gray-600 font-bold uppercase tracking-tighter">Status: {idx.status}</span>
-                                <ArrowRight className="h-3 w-3 text-gray-700 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
+                                <div className="mt-3 flex items-center justify-between">
+                                    <span className="text-[10px] text-gray-600 font-bold uppercase tracking-tighter">Status: {idx.status}</span>
+                                    <ArrowRight className="h-3 w-3 text-gray-700 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    );
+                })}
             </div>
 
             {/* Main Tabs */}

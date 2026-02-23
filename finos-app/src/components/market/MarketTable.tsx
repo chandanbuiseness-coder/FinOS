@@ -6,6 +6,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 export interface MarketItem {
