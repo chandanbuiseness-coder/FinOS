@@ -236,14 +236,23 @@ export default function TradesPage() {
 
             {/* Active tab description */}
             <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-400">{activeTab.desc}</p>
+                <div className="flex items-center gap-3">
+                    <p className="text-sm text-gray-400">{activeTab.desc}</p>
+                    {result?.session_target && (
+                        <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 px-2 py-0.5 pointer-events-none">
+                            Signals for {result.session_target}
+                        </Badge>
+                    )}
+                </div>
                 {result && (
-                    <p className="text-xs text-gray-500">
-                        {result.count} signal{result.count !== 1 ? "s" : ""} from {result.universe} stocks
-                        <span className="ml-2 text-gray-600">
-                            · {new Date(result.scanned_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                    </p>
+                    <div className="text-right">
+                        <p className="text-xs text-gray-500">
+                            {result.count} signal{result.count !== 1 ? "s" : ""} from {result.universe} stocks
+                        </p>
+                        <p className="text-[10px] text-gray-600">
+                            Market: <span className={result.market_status === "Open" ? "text-green-500" : "text-red-500"}>{result.market_status}</span> · Refresh in 15m
+                        </p>
+                    </div>
                 )}
             </div>
 

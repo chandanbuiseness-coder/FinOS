@@ -98,13 +98,16 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     const loadFromSupabase = useCallback(async (uid: string) => {
         setIsLoading(true);
         try {
-            // ── 1. Migrate localStorage if data exists ────────────────────────
-            const lsAssets = localStorage.getItem("finos_assets") || localStorage.getItem("quantra_assets");
-            const lsWatchlist = localStorage.getItem("finos_watchlist") || localStorage.getItem("quantra_watchlist");
+            // ── 1. Migrate legacy localStorage if data exists ────────────────
+            const lsFinosAssets = localStorage.getItem("finos_assets");
+            const lsFinosWatchlist = localStorage.getItem("finos_watchlist");
+            const lsQuantraAssets = localStorage.getItem("quantra_assets");
+            const lsQuantraWatchlist = localStorage.getItem("quantra_watchlist");
 
-            if (lsAssets) {
+            if (lsFinosAssets || lsQuantraAssets) {
                 try {
-                    const parsed: Asset[] = JSON.parse(lsAssets);
+                    const raw = lsQuantraAssets || lsFinosAssets;
+                    const parsed: Asset[] = JSON.parse(raw!);
                     if (parsed.length > 0) {
                         const rows = parsed.map((a) => ({
                             user_id: uid,
@@ -116,20 +119,21 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
                         await supabase.from("user_portfolio").upsert(rows, { onConflict: "user_id,symbol" });
                         localStorage.removeItem("finos_assets");
                         localStorage.removeItem("quantra_assets");
-                        console.log("[Quantra] Migrated portfolio from localStorage → Supabase");
+                        console.log("[Quantra] Migrated portfolio to Supabase");
                     }
                 } catch { }
             }
 
-            if (lsWatchlist) {
+            if (lsFinosWatchlist || lsQuantraWatchlist) {
                 try {
-                    const parsed: WatchlistItem[] = JSON.parse(lsWatchlist);
+                    const raw = lsQuantraWatchlist || lsFinosWatchlist;
+                    const parsed: WatchlistItem[] = JSON.parse(raw!);
                     if (parsed.length > 0) {
                         const rows = parsed.map((w) => ({ user_id: uid, symbol: w.symbol }));
                         await supabase.from("user_watchlist").upsert(rows, { onConflict: "user_id,symbol" });
                         localStorage.removeItem("finos_watchlist");
                         localStorage.removeItem("quantra_watchlist");
-                        console.log("[Quantra] Migrated watchlist from localStorage → Supabase");
+                        console.log("[Quantra] Migrated watchlist to Supabase");
                     }
                 } catch { }
             }

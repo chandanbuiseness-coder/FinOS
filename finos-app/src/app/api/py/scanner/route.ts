@@ -423,13 +423,37 @@ export async function GET(req: NextRequest) {
     }
     unique.sort((a: any, b: any) => b.confidence - a.confidence);
 
+    // ── Market Status Check (India: 9:15 AM - 3:30 PM IST) ───────────────────
+    const now = new Date();
+    // Use Intl to get IST time components regardless of server location
+    const istTime = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+    }).format(now);
+
+    const [istHour, istMin] = istTime.split(":").map(Number);
+    const day = now.getUTCDay(); // 0=Sun, 6=Sat
+
+    const isWeekend = day === 0 || day === 6;
+    const isTradingHours = !isWeekend && (
+        (istHour > 9 || (istHour === 9 && istMin >= 15)) &&
+        (istHour < 15 || (istHour === 15 && istMin <= 30))
+    );
+
+    const sessionLabel = isTradingHours ? "Today" : "Tomorrow / Next Session";
+    const marketStatus = isTradingHours ? "Open" : "Closed";
+
     const result = {
         scan_type: type,
         signals: unique,
         count: unique.length,
         universe: universe.length,
         scanned_at: new Date().toISOString(),
-        market_note: "Live data via Yahoo Finance. Nifty 500 universe. Educational purposes only.",
+        market_status: marketStatus,
+        session_target: sessionLabel,
+        market_note: `Calculated using latest EOD/Live data. Signals for ${sessionLabel}.`,
     };
 
     cache.set(cacheKey, { t: Date.now(), d: result });
